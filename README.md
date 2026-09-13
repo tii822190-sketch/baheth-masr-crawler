@@ -1,53 +1,53 @@
 # Baheth Masr Crawler
 
-مستودع مستقل لزاحف بردي اليومي والأسبوعي. النسخة الحالية **تجريبية معزولة**: تجمع الملاحظات والاكتشافات في SQLite ولا تعدل بيانات البحث الإنتاجية.
+مستودع مستقل لزاحف بردي اليومي والأسبوعي. النسخة الحالية **تجريبية معزولة** ولا تعدل قاعدة البحث الإنتاجية.
 
-## البنية
+## قاعدتان منفصلتان
 
-- `crawler/`: محرك الزحف Node.js.
-- `migrations/`: مخطط قاعدة staging.
-- `db/`: قاعدة محلية وبيانات seed تجريبية.
-- `.github/workflows/crawler.yml`: تشغيل يدوي ويومي وأسبوعي عبر GitHub Actions.
-- `worker/`: Worker إداري يطلق Workflow عبر GitHub API.
+1. `db/links.sqlite`: قاعدة التحكم والمدخلات، وتحتوي على المواقع والصفحات والأهداف والاكتشافات.
+2. `db/results.sqlite`: قاعدة النتائج append-only؛ كل زيارة تضيف صفًا جديدًا في `crawl_results` حتى نستطيع مقارنة الزيارات عبر الزمن.
+
+لا نستخدم Google Sheets كقاعدة تشغيل؛ يمكن تصدير `crawl_results` إلى CSV لاحقًا للتقارير البشرية، بينما SQLite أقرب إلى Turso وأسهل في الاختبار.
+
+## مصادر الروابط المحدودة
+
+- مواقع موجودة في `db/seed-staging.sql` أو تُضاف من لوحة المطور.
+- نتائج DuckDuckGo عند تمرير `CRAWLER_DDG_QUERIES`، بحد أقصى 3 استعلامات و20 نتيجة لكل استعلام، مع تأخير 1.2 ثانية.
+- الروابط التي يجدها الزاحف داخل الصفحات التي زارها، بحد أقصى 100 رابط لكل صفحة.
+- رابط يدوي عبر `CRAWLER_MANUAL_URL`.
+
+كل رابط جديد يدخل `crawl_discoveries` أولًا، ولا يصبح مصدرًا معتمدًا تلقائيًا.
 
 ## تشغيل محلي
 
 ```bash
 npm install
 npm test
-npm run db:init
-CRAWLER_LIMIT=5 npm run crawl:daily
+rm -f db/links.sqlite db/results.sqlite
+CRAWLER_LIMIT=2 npm run crawl:daily
 ```
 
-النتيجة في `db/staging.sqlite`. لا يوجد اتصال بالإنتاج ولا يحتاج Google Sheets؛ SQLite أنسب للاختبار وقابل للنقل إلى Turso لاحقًا. يمكن تصدير الجداول إلى CSV عند الحاجة.
-
-## الجدولة
-
-- يوميًا: فحص محدود للمواقع.
-- أسبوعيًا: تحديث أوسع للـmetadata.
-- يدويًا: `workflow_dispatch` مع `limit` يصل إلى 100 في مرحلة الاختبار.
-
-## Worker الإداري في حساب زميل الفريق
-
-يُنشأ Worker باسم `baheth-masr-crawler-control` في حساب Cloudflare الخاص بالمسؤول عن الزاحف. بعد ربط المستودع بحسابه:
+اختبار DDG/الرابط اليدوي:
 
 ```bash
-wrangler secret put GITHUB_TOKEN
-wrangler secret put CRAWLER_CONTROL_TOKEN
-wrangler deploy
+CRAWLER_LIMIT=2 \
+CRAWLER_DDG_QUERIES='مستشفيات مصر|جامعات مصر' \
+CRAWLER_MANUAL_URL='https://example.com' \
+npm run crawl:manual
 ```
 
-`GITHUB_TOKEN` يجب أن يكون Fine-grained Token للمستودع فقط بصلاحية Actions: Read and write. لا نستخدم Global API Key.
+## التشغيل من اللوحة
 
-تشغيل يدوي:
+Worker الإداري يطلق Workflow GitHub. يرسل:
 
-```bash
-curl -X POST https://<crawler-control-worker>/run \
-  -H 'Authorization: Bearer <control-token>' \
-  -H 'Content-Type: application/json' \
-  -d '{"run_type":"daily_check","limit":10}'
+```json
+{"run_type":"manual","limit":10,"manual_url":"https://example.com","ddg_queries":"مستشفيات مصر|جامعات مصر"}
 ```
 
-## الانتقال لاحقًا إلى Turso
+## حدود الأمان التجريبية
 
-بعد نجاح staging، نضيف Adapter لـTurso HTTP API مع نفس الجداول. لا يتم ربط قاعدة الإنتاج أو تعديل `sites` و`site_pages` قبل مراجعة observations ومعدلات الفشل.
+- لا زحف تلقائي من اكتشاف إلى اكتشاف بلا حدود.
+- لا متابعة للروابط المكتشفة في نفس التشغيل؛ تُراجع أولًا.
+- لا حذف أو تحديث لبيانات البحث الحالية.
+- كل استجابة تحفظ في صف مستقل في `crawl_results`.
+- DuckDuckGo مصدر اقتراحات محدود، وليس مصدر الحقيقة النهائي.

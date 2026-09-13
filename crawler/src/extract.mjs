@@ -9,6 +9,6 @@ export function extractHtml(html, responseUrl) {
   const text = $('body').text().replace(/\s+/g, ' ').trim().slice(0, 50000);
   const contentHash = crypto.createHash('sha256').update(`${title}\n${description}\n${text}`).digest('hex');
   const links = new Set();
-  $('a[href]').each((_, el) => { try { const u = new URL($(el).attr('href'), responseUrl); if (['http:','https:'].includes(u.protocol)) links.add(u.toString()); } catch {} });
-  return { title, description, iconUrl: icon ? new URL(icon, responseUrl).toString() : '', extractedText: text, contentHash, links: [...links].slice(0, 500) };
+  $('a[href]').each((_, el) => { try { const raw=$(el).attr('href'); if (!raw || /^(mailto:|tel:|javascript:|#)/i.test(raw)) return; const u = new URL(raw, responseUrl); if (['http:','https:'].includes(u.protocol)) links.add(u.toString()); } catch {} });
+  return { title, description, iconUrl: icon ? new URL(icon, responseUrl).toString() : '', extractedText: text, contentHash, links: [...links].slice(0, 100) };
 }
