@@ -1,0 +1,11 @@
+name = "baheth-masr-crawler-control"
+main = "src/index.js"
+compatibility_date = "2026-09-11"
+
+[vars]
+GITHUB_REPO = "tii822190-sketch/baheth-masr-crawler"
+GITHUB_REF = "main"
+
+# Set as secrets, never commit values:
+# wrangler secret put GITHUB_TOKEN
+# wrangler secret put CRAWLER_CONTROL_TOKEN

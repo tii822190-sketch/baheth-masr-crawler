@@ -1,0 +1,41 @@
+name: Baheth Masr Crawler
+on:
+  workflow_dispatch:
+    inputs:
+      run_type:
+        description: Run type
+        required: true
+        default: daily_check
+        type: choice
+        options: [daily_check, weekly_refresh, manual]
+      limit:
+        description: Maximum seed sites for this run
+        required: true
+        default: '10'
+  schedule:
+    - cron: '30 0 * * *'
+    - cron: '0 1 * * 5'
+permissions:
+  contents: read
+jobs:
+  crawl:
+    runs-on: ubuntu-latest
+    env:
+      CRAWLER_LIMIT: ${{ github.event.inputs.limit || '10' }}
+      CRAWLER_DB_PATH: db/staging.sqlite
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - name: Select scheduled mode
+        id: mode
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then echo "run_type=${{ github.event.inputs.run_type }}" >> "$GITHUB_OUTPUT"; elif [ "$(date -u +%u)" = "5" ]; then echo 'run_type=weekly_refresh' >> "$GITHUB_OUTPUT"; else echo 'run_type=daily_check' >> "$GITHUB_OUTPUT"; fi
+      - run: node crawler/src/cli.mjs init
+      - run: node crawler/src/cli.mjs "${{ steps.mode.outputs.run_type }}"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: crawler-staging-database-${{ github.run_id }}
+          path: db/staging.sqlite
