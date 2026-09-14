@@ -1,5 +1,6 @@
 INSERT OR IGNORE INTO sites (url,name,priority) VALUES
-  ('https://bardy.pages.dev/','بردي',90),
+  ('https://bardy.pages.dev/','بردي — الموقع الرئيسي',90),
+  ('https://baheth-masr-api.tii822190.workers.dev/','بردي — واجهة البحث API',80),
   ('https://www.alexu.edu.eg/','جامعة الإسكندرية',70),
   ('https://www.cairo.gov.eg/','محافظة القاهرة',70),
   ('https://asush.asu.edu.eg/','مستشفى عين شمس التخصصي',70),
