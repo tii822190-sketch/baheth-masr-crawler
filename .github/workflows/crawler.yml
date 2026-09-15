@@ -49,6 +49,9 @@ jobs:
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then echo "run_type=${{ github.event.inputs.run_type }}" >> "$GITHUB_OUTPUT"; elif [ "$(date -u +%u)" = "5" ]; then echo 'run_type=weekly_refresh' >> "$GITHUB_OUTPUT"; else echo 'run_type=daily_check' >> "$GITHUB_OUTPUT"; fi
       - run: node crawler/src/cli.mjs init
       - run: node crawler/src/cli.mjs "${{ steps.mode.outputs.run_type }}"
+      - name: Sync crawler staging results to Turso
+        if: success()
+        run: node tools/sync-turso-staging.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
