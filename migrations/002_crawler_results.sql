@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS crawl_results (
   title TEXT NOT NULL DEFAULT '',
   description TEXT NOT NULL DEFAULT '',
   summary TEXT NOT NULL DEFAULT '',
+  search_snippet TEXT NOT NULL DEFAULT '',
   icon_url TEXT NOT NULL DEFAULT '',
   extracted_text TEXT NOT NULL DEFAULT '',
   content_hash TEXT NOT NULL DEFAULT '',
