@@ -7,6 +7,7 @@
     "crawl:weekly": "node crawler/src/cli.mjs weekly_refresh",
     "crawl:manual": "node crawler/src/cli.mjs manual",
     "db:init": "node crawler/src/cli.mjs init",
+    "export:google-sheets": "node integrations/google-sheets-export.mjs",
     "test": "node --test crawler/test/*.test.mjs"
   },
   "dependencies": {
