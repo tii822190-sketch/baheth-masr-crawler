@@ -48,6 +48,7 @@ CREATE TABLE IF NOT EXISTS crawl_targets (
   page_id INTEGER REFERENCES site_pages(id),
   url TEXT NOT NULL,
   canonical_url TEXT NOT NULL,
+  parent_url TEXT NOT NULL DEFAULT '',
   priority INTEGER NOT NULL DEFAULT 70,
   reason TEXT NOT NULL DEFAULT 'daily_check',
   status TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued','processing','completed','failed','skipped')),

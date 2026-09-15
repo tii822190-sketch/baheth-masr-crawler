@@ -9,6 +9,10 @@
 
 لا نستخدم Google Sheets كقاعدة تشغيل؛ يمكن تصدير `crawl_results` إلى CSV لاحقًا للتقارير البشرية، بينما SQLite أقرب إلى Turso وأسهل في الاختبار.
 
+## Turso staging
+
+قاعدة الزاحف منفصلة عن قاعدة المواقع والصفحات الإنتاجية. يطبق Workflow مخططات `migrations/001_crawler_staging.sql` و`002_crawler_results.sql` و`003_distribution.sql` قبل التشغيل، ثم يستخدم SQLite المحلي كنسخة تشغيل مؤقتة. في GitHub يجب إضافة السر `TURSO_CRAWLER_AUTH_TOKEN` فقط؛ عنوان قاعدة staging موجود في Workflow لأنه ليس سرًا. لا تستخدم توكن قاعدة الإنتاج هنا.
+
 ## مصادر الروابط المحدودة
 
 - مواقع موجودة في `db/seed-staging.sql` أو تُضاف من لوحة المطور.
