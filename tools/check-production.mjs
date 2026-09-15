@@ -7,6 +7,8 @@ const requests=[
  {type:'execute',stmt:{sql:'PRAGMA table_info(sites)'}},
  {type:'execute',stmt:{sql:'PRAGMA table_info(site_pages)'}},
  {type:'execute',stmt:{sql:'PRAGMA table_info(site_search_fts)'}},
+ {type:'execute',stmt:{sql:"SELECT id,site_id,url,canonical_url,title,status,http_status,crawl_status FROM site_pages WHERE title LIKE '%EgyptSchools%' OR url LIKE '%egyptschools%' OR canonical_url LIKE '%egyptschools%'"}},
+ {type:'execute',stmt:{sql:"SELECT record_type,record_id,site_id,title,description FROM site_search_fts WHERE title LIKE '%EgyptSchools%' OR record_id IN (SELECT CAST(id AS TEXT) FROM site_pages WHERE title LIKE '%EgyptSchools%' OR url LIKE '%egyptschools%')"}},
  {type:'close'}
 ];
 const response=await fetch(`${base}/v2/pipeline`,{method:'POST',headers:{authorization:`Bearer ${token}`,'content-type':'application/json'},body:JSON.stringify({requests})});
