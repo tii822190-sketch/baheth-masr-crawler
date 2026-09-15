@@ -1,23 +1,15 @@
 import crypto from 'node:crypto';
 import * as cheerio from 'cheerio';
 
-const NON_CONTENT = 'script,style,noscript,template,svg,canvas,iframe,object,embed,form,button,input,select,textarea';
-const BOILERPLATE = 'nav,header,footer,aside,.sidebar,.navbar,.navigation,.social,.share,.comments,#comments,.cookie,.popup,.advert,.ads,.ad,.sidebar .widget,.footer .widget';
-
-function cleanText(value) { return value.replace(/\u00a0/g,' ').replace(/[ \t]+/g,' ').replace(/\s*\n\s*/g,'\n').replace(/\n{3,}/g,'\n\n').trim(); }
-
-function extractUsefulText($) {
-  $(NON_CONTENT).remove();
-  const root=$('body').get(0); if(!root)return '';
-  const scoped=$(root); scoped.find(BOILERPLATE).remove();
-  const blocks=[];
-  scoped.find('article,div.post,div.post-body,.entry-content,.post-content,.widget-content,h1,h2,h3,h4,h5,h6,p,li,blockquote,pre,td,th').each((_,el)=>{const text=cleanText($(el).text());if(text.length>=2&&!blocks.includes(text))blocks.push(text);});
-  const structured=cleanText(blocks.join('\n')); const fallback=cleanText(scoped.text());
-  return (structured.length>=80?structured:fallback).slice(0,50000);
-}
-
+const NON_CONTENT='script,style,noscript,template,svg,canvas,iframe,object,embed,form,button,input,select,textarea';
+const BOILERPLATE='nav,header,footer,aside,.sidebar,.navbar,.navigation,.social,.share,.comments,#comments,.cookie,.popup,.advert,.ads,.ad,.sidebar .widget,.footer .widget';
+const SOCIAL_HOSTS=['facebook.com','fb.com','youtube.com','youtu.be','x.com','twitter.com','instagram.com','tiktok.com','linkedin.com','telegram.me','t.me'];
+function cleanText(value){return value.replace(/\u00a0/g,' ').replace(/[ \t]+/g,' ').replace(/\s*\n\s*/g,'\n').replace(/\n{3,}/g,'\n\n').trim();}
+function extractUsefulText($){$(NON_CONTENT).remove();const root=$('body').get(0);if(!root)return '';const scoped=$(root);scoped.find(BOILERPLATE).remove();const blocks=[];scoped.find('article,div.post,div.post-body,.entry-content,.post-content,.widget-content,h1,h2,h3,h4,h5,h6,p,li,blockquote,pre,td,th').each((_,el)=>{const text=cleanText($(el).text());if(text.length>=2&&!blocks.includes(text))blocks.push(text);});const structured=cleanText(blocks.join('\n'));const fallback=cleanText(scoped.text());return(structured.length>=80?structured:fallback).slice(0,50000);}
 function cleanUrlCandidate(raw,responseUrl){if(!raw||/^(mailto:|tel:|javascript:|#|data:)/i.test(raw))return '';let value=raw.trim().replace(/^['"\s]+|['"\s]+$/g,'');const embedded=value.match(/https?:\/\/[^\s"'<>]+/i);if(embedded)value=embedded[0];try{const u=new URL(value,responseUrl);return['http:','https:'].includes(u.protocol)?u.toString():'';}catch{return '';}}
+function isSocial(host){const h=host.toLowerCase().replace(/^www\./,'');return SOCIAL_HOSTS.some(x=>h===x||h.endsWith(`.${x}`));}
+function makeSummary(title,description,text){if(description)return description.slice(0,500);const sentences=text.split(/(?<=[.!؟。])\s+/).filter(Boolean);return `${title}${title&&sentences.length?' — ':''}${sentences.slice(0,3).join(' ')}`.trim().slice(0,500);}
 
 export function extractHtml(html,responseUrl){
-  const $=cheerio.load(html);const title=cleanText($('title').first().text())||cleanText($('meta[property="og:title" i]').attr('content')||'');const description=cleanText($('meta[name="description" i]').attr('content')||$('meta[property="og:description" i]').attr('content')||'');const icon=$('link[rel~="icon" i]').attr('href')||$('meta[property="og:image" i]').attr('content')||'';const text=extractUsefulText($);const contentHash=crypto.createHash('sha256').update(`${title}\n${description}\n${text}`).digest('hex');const links=new Set();$('a[href]').each((_,el)=>{const url=cleanUrlCandidate($(el).attr('href'),responseUrl);if(url)links.add(url);});let iconUrl='';try{iconUrl=icon?new URL(icon,responseUrl).toString():'';}catch{}return{title,description,iconUrl,extractedText:text,contentHash,links:[...links].slice(0,100)};
+ const $=cheerio.load(html);const baseHost=new URL(responseUrl).hostname.replace(/^www\./,'');const title=cleanText($('title').first().text())||cleanText($('meta[property="og:title" i]').attr('content')||'');const description=cleanText($('meta[name="description" i]').attr('content')||$('meta[property="og:description" i]').attr('content')||'');const icon=$('link[rel~="icon" i]').attr('href')||$('meta[property="og:image" i]').attr('content')||'';const text=extractUsefulText($);const summary=makeSummary(title,description,text);const contentHash=crypto.createHash('sha256').update(`${title}\n${description}\n${summary}\n${text}`).digest('hex');const links=[];const seen=new Set();$('a[href]').each((_,el)=>{const url=cleanUrlCandidate($(el).attr('href'),responseUrl);if(!url||seen.has(url))return;seen.add(url);const u=new URL(url);const host=u.hostname.replace(/^www\./,'');links.push({url,anchorText:cleanText($(el).text()).slice(0,200),type:isSocial(host)?'social':host===baseHost?'internal':'external'});});let iconUrl='';try{iconUrl=icon?new URL(icon,responseUrl).toString():'';}catch{}return{title,description,summary,iconUrl,extractedText:text,contentHash,links:links.slice(0,100),internalLinks:links.filter(x=>x.type==='internal').map(x=>x.url),externalLinks:links.filter(x=>x.type==='external').map(x=>x.url),socialLinks:links.filter(x=>x.type==='social').map(x=>x.url)};
 }

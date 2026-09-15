@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-15T15:56:57.514Z",
+  "generatedAt": "2026-09-15T16:05:48.029Z",
   "source": "https://codenex1.blogspot.com",
   "result": {
     "id": 1,
@@ -15,12 +15,17 @@
     "content_length": 167068,
     "title": "Codenex",
     "description": "codenex: أفضل أدوات الويب المجانية، دروس برمجة، وحلول تقنية مبتكرة للمطورين",
+    "summary": "codenex: أفضل أدوات الويب المجانية، دروس برمجة، وحلول تقنية مبتكرة للمطورين",
     "icon_url": "https://codenex1.blogspot.com/favicon.ico",
     "extracted_text": "ادوات ويب\nSocial Widget\nحاسبة الصحة الذكية\nأداة QR الذكية: توليد وفك شفرات الاستجابة السريعة\nمحول الوحدات الذكي📏 طول ⚖️ وزن 🌡️ حرارة 📐 مساحة 🧪 حجم ⏱ زمن 💾 بيانات\nفاحص كلمة المرور\nمولّد كلمات المرور\nمولد روابط المشاركة\nالرئيسية\nمن نحن\nاتصل بنا\nسياسه الخصوصية\nالرئيسية\nمن نحن\nاتصل بنا\nسياسه الخصوصية",
-    "content_hash": "155a3864a54a4554077ea43a4e25df7fe34657d089d8925e2a50e61644ff01eb",
+    "content_hash": "c177fac77f91865a2fbe26748b9eb0e5703a0a0b0516bff597284599dc984599",
+    "links_json": "[{\"url\":\"https://codenex1.blogspot.com/\",\"anchorText\":\"\",\"type\":\"internal\"},{\"url\":\"https://codenex1.blogspot.com/search/label/%D8%A3%D8%AF%D9%88%D8%A7%D8%AA%20%D8%A7%D9%84%D9%88%D9%8A%D8%A8?&max-results=5\",\"anchorText\":\"ادوات ويب\",\"type\":\"internal\"},{\"url\":\"https://codenex1.blogspot.com/2026/04/hex-rgb-hsl-hex-rgb-hsl-0.html\",\"anchorText\":\"\",\"type\":\"internal\"},{\"url\":\"https://codenex1.blogspot.com/2026/03/blog-post_67.html\",\"anchorText\":\"\",\"type\":\"internal\"},{\"url\":\"https://codenex1.blogspot.com/2026/03/qr_31.html\",\"anchorText\":\"\",\"type\":\"internal\"},{\"url\":\"https://codenex1.blogspot.com/2026/03/blog-post_13.html\",\"anchorText\":\"\",\"type\":\"internal\"},{\"url\":\"https://codenex1.blogspot.com/2026/03/blog-post_42.html\",\"anchorText\":\"\",\"type\":\"internal\"},{\"url\":\"https://codenex1.blogspot.com/2026/03/blog-post_23.html\",\"anchorText\":\"\",\"type\":\"internal\"},{\"url\":\"https://codenex1.blogspot.com/2026/03/blog-post_31.html\",\"anchorText\":\"\",\"type\":\"internal\"},{\"url\":\"https://codenex1.blogspot.com/search?updated-max=2026-03-31T05:11:00-07:00&max-results=8\",\"anchorText\":\"رسائل أقدم\",\"type\":\"internal\"},{\"url\":\"https://codenex1.blogspot.com/p/blog-page.html\",\"anchorText\":\"من نحن\",\"type\":\"internal\"},{\"url\":\"https://codenex1.blogspot.com/p/codenex.html\",\"anchorText\":\"اتصل بنا\",\"type\":\"internal\"},{\"url\":\"https://codenex1.blogspot.com/p/blog-page_28.html\",\"anchorText\":\"سياسه الخصوصية\",\"type\":\"internal\"},{\"url\":\"https://www.codenex.blogspot.com/\",\"anchorText\":\"coder karam\",\"type\":\"external\"}]",
+    "internal_links_json": "[\"https://codenex1.blogspot.com/\",\"https://codenex1.blogspot.com/search/label/%D8%A3%D8%AF%D9%88%D8%A7%D8%AA%20%D8%A7%D9%84%D9%88%D9%8A%D8%A8?&max-results=5\",\"https://codenex1.blogspot.com/2026/04/hex-rgb-hsl-hex-rgb-hsl-0.html\",\"https://codenex1.blogspot.com/2026/03/blog-post_67.html\",\"https://codenex1.blogspot.com/2026/03/qr_31.html\",\"https://codenex1.blogspot.com/2026/03/blog-post_13.html\",\"https://codenex1.blogspot.com/2026/03/blog-post_42.html\",\"https://codenex1.blogspot.com/2026/03/blog-post_23.html\",\"https://codenex1.blogspot.com/2026/03/blog-post_31.html\",\"https://codenex1.blogspot.com/search?updated-max=2026-03-31T05:11:00-07:00&max-results=8\",\"https://codenex1.blogspot.com/p/blog-page.html\",\"https://codenex1.blogspot.com/p/codenex.html\",\"https://codenex1.blogspot.com/p/blog-page_28.html\"]",
+    "external_links_json": "[\"https://www.codenex.blogspot.com/\"]",
+    "social_links_json": "[]",
     "discovered_links_count": 14,
-    "fetched_at": "2026-09-15 15:56:57",
-    "duration_ms": 6855,
+    "fetched_at": "2026-09-15 16:05:47",
+    "duration_ms": 5298,
     "error_message": ""
   },
   "targets": [
@@ -36,9 +41,9 @@
       "reason": "manual",
       "status": "completed",
       "attempts": 1,
-      "last_attempt_at": "2026-09-15 15:56:50",
+      "last_attempt_at": "2026-09-15 16:05:42",
       "next_attempt_at": null,
-      "created_at": "2026-09-15 15:56:50"
+      "created_at": "2026-09-15 16:05:42"
     }
   ],
   "discoveries": [
@@ -54,7 +59,7 @@
       "title_hint": "",
       "description_hint": "",
       "status": "queued",
-      "discovered_at": "2026-09-15 15:56:50"
+      "discovered_at": "2026-09-15 16:05:42"
     },
     {
       "id": 2,
@@ -68,7 +73,7 @@
       "title_hint": "Codenex",
       "description_hint": "codenex: أفضل أدوات الويب المجانية، دروس برمجة، وحلول تقنية مبتكرة للمطورين",
       "status": "pending",
-      "discovered_at": "2026-09-15 15:56:57"
+      "discovered_at": "2026-09-15 16:05:47"
     },
     {
       "id": 3,
@@ -82,7 +87,7 @@
       "title_hint": "Codenex",
       "description_hint": "codenex: أفضل أدوات الويب المجانية، دروس برمجة، وحلول تقنية مبتكرة للمطورين",
       "status": "pending",
-      "discovered_at": "2026-09-15 15:56:57"
+      "discovered_at": "2026-09-15 16:05:47"
     },
     {
       "id": 4,
@@ -96,7 +101,7 @@
       "title_hint": "Codenex",
       "description_hint": "codenex: أفضل أدوات الويب المجانية، دروس برمجة، وحلول تقنية مبتكرة للمطورين",
       "status": "pending",
-      "discovered_at": "2026-09-15 15:56:57"
+      "discovered_at": "2026-09-15 16:05:47"
     },
     {
       "id": 5,
@@ -110,7 +115,7 @@
       "title_hint": "Codenex",
       "description_hint": "codenex: أفضل أدوات الويب المجانية، دروس برمجة، وحلول تقنية مبتكرة للمطورين",
       "status": "pending",
-      "discovered_at": "2026-09-15 15:56:57"
+      "discovered_at": "2026-09-15 16:05:47"
     },
     {
       "id": 6,
@@ -124,7 +129,7 @@
       "title_hint": "Codenex",
       "description_hint": "codenex: أفضل أدوات الويب المجانية، دروس برمجة، وحلول تقنية مبتكرة للمطورين",
       "status": "pending",
-      "discovered_at": "2026-09-15 15:56:57"
+      "discovered_at": "2026-09-15 16:05:47"
     },
     {
       "id": 7,
@@ -138,7 +143,7 @@
       "title_hint": "Codenex",
       "description_hint": "codenex: أفضل أدوات الويب المجانية، دروس برمجة، وحلول تقنية مبتكرة للمطورين",
       "status": "pending",
-      "discovered_at": "2026-09-15 15:56:57"
+      "discovered_at": "2026-09-15 16:05:47"
     },
     {
       "id": 8,
@@ -152,7 +157,7 @@
       "title_hint": "Codenex",
       "description_hint": "codenex: أفضل أدوات الويب المجانية، دروس برمجة، وحلول تقنية مبتكرة للمطورين",
       "status": "pending",
-      "discovered_at": "2026-09-15 15:56:57"
+      "discovered_at": "2026-09-15 16:05:47"
     },
     {
       "id": 9,
@@ -166,7 +171,7 @@
       "title_hint": "Codenex",
       "description_hint": "codenex: أفضل أدوات الويب المجانية، دروس برمجة، وحلول تقنية مبتكرة للمطورين",
       "status": "pending",
-      "discovered_at": "2026-09-15 15:56:57"
+      "discovered_at": "2026-09-15 16:05:47"
     },
     {
       "id": 10,
@@ -180,7 +185,7 @@
       "title_hint": "Codenex",
       "description_hint": "codenex: أفضل أدوات الويب المجانية، دروس برمجة، وحلول تقنية مبتكرة للمطورين",
       "status": "pending",
-      "discovered_at": "2026-09-15 15:56:57"
+      "discovered_at": "2026-09-15 16:05:47"
     },
     {
       "id": 11,
@@ -194,7 +199,7 @@
       "title_hint": "Codenex",
       "description_hint": "codenex: أفضل أدوات الويب المجانية، دروس برمجة، وحلول تقنية مبتكرة للمطورين",
       "status": "pending",
-      "discovered_at": "2026-09-15 15:56:57"
+      "discovered_at": "2026-09-15 16:05:47"
     },
     {
       "id": 12,
@@ -208,7 +213,7 @@
       "title_hint": "Codenex",
       "description_hint": "codenex: أفضل أدوات الويب المجانية، دروس برمجة، وحلول تقنية مبتكرة للمطورين",
       "status": "pending",
-      "discovered_at": "2026-09-15 15:56:57"
+      "discovered_at": "2026-09-15 16:05:47"
     },
     {
       "id": 13,
@@ -222,7 +227,7 @@
       "title_hint": "Codenex",
       "description_hint": "codenex: أفضل أدوات الويب المجانية، دروس برمجة، وحلول تقنية مبتكرة للمطورين",
       "status": "pending",
-      "discovered_at": "2026-09-15 15:56:57"
+      "discovered_at": "2026-09-15 16:05:47"
     },
     {
       "id": 14,
@@ -236,7 +241,7 @@
       "title_hint": "Codenex",
       "description_hint": "codenex: أفضل أدوات الويب المجانية، دروس برمجة، وحلول تقنية مبتكرة للمطورين",
       "status": "pending",
-      "discovered_at": "2026-09-15 15:56:57"
+      "discovered_at": "2026-09-15 16:05:47"
     }
   ],
   "extractedText": "ادوات ويب\nSocial Widget\nحاسبة الصحة الذكية\nأداة QR الذكية: توليد وفك شفرات الاستجابة السريعة\nمحول الوحدات الذكي📏 طول ⚖️ وزن 🌡️ حرارة 📐 مساحة 🧪 حجم ⏱ زمن 💾 بيانات\nفاحص كلمة المرور\nمولّد كلمات المرور\nمولد روابط المشاركة\nالرئيسية\nمن نحن\nاتصل بنا\nسياسه الخصوصية\nالرئيسية\nمن نحن\nاتصل بنا\nسياسه الخصوصية"
