@@ -6,6 +6,7 @@ const requests=[
  {type:'execute',stmt:{sql:"SELECT name,type FROM sqlite_master WHERE type IN ('table','view') ORDER BY type,name"}},
  {type:'execute',stmt:{sql:'PRAGMA table_info(sites)'}},
  {type:'execute',stmt:{sql:'PRAGMA table_info(site_pages)'}},
+ {type:'execute',stmt:{sql:'PRAGMA table_info(site_search_fts)'}},
  {type:'close'}
 ];
 const response=await fetch(`${base}/v2/pipeline`,{method:'POST',headers:{authorization:`Bearer ${token}`,'content-type':'application/json'},body:JSON.stringify({requests})});
@@ -16,7 +17,7 @@ const result=body.results||[];
 const rows=(index)=>result[index]?.response?.result?.rows||[];
 const cols=(index)=>result[index]?.response?.result?.cols||[];
 const values=(index)=>rows(index).map(row=>Object.fromEntries(cols(index).map((c,i)=>[c.name,row[i]?.value??null])));
-const productionFields={sites:values(2).map(x=>x.name),site_pages:values(3).map(x=>x.name)};
+const productionFields={sites:values(2).map(x=>x.name),site_pages:values(3).map(x=>x.name),site_search_fts:values(4).map(x=>x.name)};
 const required={sites:['url','name','status'],site_pages:['site_id','url','title','description','content_hash','http_status','crawl_status']};
 const missing=Object.fromEntries(Object.entries(required).map(([table,fields])=>[table,fields.filter(x=>!productionFields[table].includes(x))]));
 console.log(JSON.stringify({ok:true,health:values(0),objects:values(1),productionFields,missing,writePerformed:false},null,2));
