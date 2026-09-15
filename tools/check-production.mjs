@@ -22,4 +22,4 @@ const values=(index)=>rows(index).map(row=>Object.fromEntries(cols(index).map((c
 const productionFields={sites:values(2).map(x=>x.name),site_pages:values(3).map(x=>x.name),site_search_fts:values(4).map(x=>x.name)};
 const required={sites:['url','name','status'],site_pages:['site_id','url','title','description','content_hash','http_status','crawl_status']};
 const missing=Object.fromEntries(Object.entries(required).map(([table,fields])=>[table,fields.filter(x=>!productionFields[table].includes(x))]));
-console.log(JSON.stringify({ok:true,health:values(0),objects:values(1),productionFields,missing,writePerformed:false},null,2));
+console.log(JSON.stringify({ok:true,health:values(0),objects:values(1),productionFields,diagnosticPages:values(5),diagnosticFts:values(6),missing,writePerformed:false},null,2));
