@@ -1,0 +1,15 @@
+name: Check Production Database
+on:
+  workflow_dispatch:
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    env:
+      TURSO_PRODUCTION_DATABASE_URL: ${{ secrets.TURSO_PRODUCTION_DATABASE_URL }}
+      TURSO_PRODUCTION_AUTH_TOKEN: ${{ secrets.TURSO_PRODUCTION_AUTH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Check production connection and schema (read-only)
+        run: node tools/check-production.mjs
