@@ -5,7 +5,7 @@ jobs:
   sync:
     runs-on: ubuntu-latest
     env:
-      TURSO_CRAWLER_DATABASE_URL: ${{ secrets.TURSO_CRAWLER_DATABASE_URL }}
+      TURSO_CRAWLER_DATABASE_URL: libsql://alzahf-karamkkr.aws-eu-west-1.turso.io
       TURSO_CRAWLER_AUTH_TOKEN: ${{ secrets.TURSO_CRAWLER_AUTH_TOKEN }}
       TURSO_PRODUCTION_DATABASE_URL: ${{ secrets.TURSO_PRODUCTION_DATABASE_URL }}
       TURSO_PRODUCTION_AUTH_TOKEN: ${{ secrets.TURSO_PRODUCTION_AUTH_TOKEN }}
