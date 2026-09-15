@@ -18,7 +18,8 @@ export function validateRow(row, duplicateCount=1){
 
 if (import.meta.url===`file://${process.argv[1]}`){
   const db=new Database(process.env.CRAWLER_RESULTS_DB_PATH||'db/results.sqlite');
-  const rows=db.prepare('SELECT * FROM crawl_review_items ORDER BY id').all();
+  const rows=db.prepare('SELECT v.*,r.crawl_status,r.http_status,r.content_type,r.quality_status AS result_quality_status,r.title AS result_title,r.extracted_text AS result_extracted_text,r.search_text AS result_search_text,r.canonical_url AS result_canonical_url FROM crawl_review_items v JOIN crawl_results r ON r.id=v.result_id ORDER BY v.id').all();
+  for(const row of rows){row.quality_status=row.result_quality_status;row.title=row.result_title;row.extracted_text=row.result_extracted_text;row.search_text=row.result_search_text;row.canonical_url=row.result_canonical_url;}
   const counts=new Map();
   for(const row of rows)counts.set(row.canonical_url,(counts.get(row.canonical_url)||0)+1);
   const update=db.prepare('UPDATE crawl_review_items SET validation_status=?,validation_reason=?,validated_at=CURRENT_TIMESTAMP,validator_version=? WHERE id=?');
