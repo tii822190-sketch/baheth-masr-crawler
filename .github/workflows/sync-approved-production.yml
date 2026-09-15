@@ -1,0 +1,17 @@
+name: Sync Approved Crawler Data to Production
+on:
+  workflow_dispatch:
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    env:
+      TURSO_CRAWLER_DATABASE_URL: ${{ secrets.TURSO_CRAWLER_DATABASE_URL }}
+      TURSO_CRAWLER_AUTH_TOKEN: ${{ secrets.TURSO_CRAWLER_AUTH_TOKEN }}
+      TURSO_PRODUCTION_DATABASE_URL: ${{ secrets.TURSO_PRODUCTION_DATABASE_URL }}
+      TURSO_PRODUCTION_AUTH_TOKEN: ${{ secrets.TURSO_PRODUCTION_AUTH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Sync approved row and verify page plus FTS
+        run: node tools/sync-approved-production.mjs
