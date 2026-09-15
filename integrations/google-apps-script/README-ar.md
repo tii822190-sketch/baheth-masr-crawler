@@ -1,70 +1,98 @@
-# ربط الزاحف بجدول Google Sheets للتجربة
+# Google Sheets — قاعدة تجربة بسيطة للزاحف
 
-## 1. إنشاء الجدول
+هذا الإصدار يستخدم **تبويبًا واحدًا فقط** باسم `CrawlResults`.
 
-أنشئ Google Sheet جديدًا، ثم افتح **Extensions → Apps Script**، والصق محتوى `Code.txt` كاملًا.
-
-## 2. إنشاء التبويبات والأعمدة
-
-من محرر Apps Script شغّل الدالة:
+## الأعمدة
 
 ```text
-setupSheets
+result_id
+run_type
+requested_url
+canonical_url
+response_url
+http_status
+crawl_status
+content_type
+content_length
+title
+description
+summary
+search_snippet
+icon_url
+extracted_text
+content_hash
+links_json
+internal_links_json
+external_links_json
+social_links_json
+discovered_links_count
+duration_ms
+error_message
+fetched_at
 ```
 
-سيتم إنشاء أربعة تبويبات:
+## الإعداد من الصفر
 
-- `IndexedSites`: المواقع التي دخلت أو فُهرست.
-- `IndexedPages`: الصفحات والروابط الداخلية المرشحة للفهرسة.
-- `CrawlResults`: كل نتيجة زحف في صف مستقل.
-- `LinkDiscoveries`: كل رابط اكتشفه الزاحف ومصدره.
+1. افتح Google Sheet.
+2. افتح **Extensions → Apps Script**.
+3. الصق محتوى `Code.txt` كاملًا.
+4. احفظ المشروع.
+5. شغّل الدالة `resetEverything()` مرة واحدة.
 
-## 3. إضافة حماية بسيطة
+> الدالة `resetEverything()` تحذف كل التبويبات الأخرى وكل بياناتها، ثم تنشئ تبويبًا واحدًا نظيفًا باسم `CrawlResults`. لا تشغّلها مرة أخرى بعد بدء حفظ النتائج إلا إذا أردت حذف البيانات من جديد.
 
-شغّل:
+## حماية Web App
+
+شغّل مرة واحدة:
 
 ```javascript
-setCrawlerToken('ضع-رمزًا-طويلًا-هنا');
+setCrawlerToken('ضع-رمزًا-طويلًا-وسريًا-هنا');
 ```
 
-احتفظ بالرمز ولا تضعه في المستودع.
+## النشر
 
-## 4. نشر Web App
+من Apps Script اختر:
 
-من Apps Script:
+```text
+Deploy → New deployment → Web app
+```
 
-1. Deploy → New deployment.
-2. Type: Web app.
-3. Execute as: Me.
-4. Who has access: Anyone with the link.
-5. انسخ رابط Web App.
+الإعدادات:
 
-## 5. إرسال نتيجة اختبار
+```text
+Execute as: Me
+Who has access: Anyone with the link
+```
 
-بعد تشغيل الزاحف محليًا:
+انسخ رابط Web App الذي ينتهي غالبًا بـ `/exec`.
+
+## تشغيل الزاحف يدويًا ثم إرسال النتيجة
+
+بعد أن يشغّل الزاحف رابطًا محددًا:
+
+```bash
+CRAWLER_LIMIT=0 \
+CRAWLER_MANUAL_URL='https://elsabagh.com' \
+npm run crawl:manual
+```
+
+ثم أرسل آخر نتيجة إلى Google Sheet:
 
 ```bash
 GOOGLE_SHEETS_WEB_APP_URL='https://script.google.com/macros/s/ضع-المعرف/exec' \
 GOOGLE_SHEETS_TOKEN='نفس-الرمز' \
-node integrations/google-sheets-export.mjs
+npm run export:google-sheets
 ```
 
-## ماذا يُرسل؟
+كل تشغيل يدوي يضيف صفًا جديدًا في `CrawlResults`.
 
-يُرسل:
+## ما يسجل في الصف
 
-- العنوان الأصلي.
-- الوصف الأصلي.
-- الخلاصة.
-- `search_snippet`.
-- الرابط المطلوب والنهائي.
-- المحتوى النصي المنظف.
-- الروابط الداخلية والخارجية والاجتماعية.
-- حالة HTTP وزمن الاستجابة وبصمة المحتوى.
-- الروابط المكتشفة.
+- الرابط المطلوب والرابط النهائي.
+- العنوان والوصف الأساسي الأصليان.
+- الخلاصة و`search_snippet` المحسن.
+- النص المنظف من CSS وJavaScript.
+- كل الروابط والروابط الداخلية والخارجية والاجتماعية بصيغة JSON.
+- الحالة والحجم والزمن والبصمة ورسالة الخطأ.
 
-كل نتيجة زحف تُضاف إلى `CrawlResults` كصف جديد، ولا تستبدل الصفوف السابقة.
-
-## تنبيه
-
-هذه نسخة اختبار باستخدام Google Sheets. عند اعتماد الزاحف ننقل نفس الأعمدة إلى Turso أو قاعدة تشغيل فعلية. لا تضع رمز Google Web App أو أي بيانات حساسة داخل GitHub.
+لا توجد جدولة أو جداول صفحات منفصلة في هذه النسخة التجريبية.
