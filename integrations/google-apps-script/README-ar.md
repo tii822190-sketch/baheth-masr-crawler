@@ -2,7 +2,7 @@
 
 ## 1. إنشاء الجدول
 
-أنشئ Google Sheet جديدًا، ثم افتح **Extensions → Apps Script**، والصق محتوى `Code.gs` كاملًا.
+أنشئ Google Sheet جديدًا، ثم افتح **Extensions → Apps Script**، والصق محتوى `Code.txt` كاملًا.
 
 ## 2. إنشاء التبويبات والأعمدة
 
