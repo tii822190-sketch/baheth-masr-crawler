@@ -12,6 +12,7 @@ const requests=[
  {type:'execute',stmt:{sql:"SELECT id,name,url,canonical_url,status FROM sites WHERE name LIKE '%EgyptSchools%' OR url LIKE '%egyptschools%' OR canonical_url LIKE '%egyptschools%'"}},
  {type:'execute',stmt:{sql:'SELECT id,site_id,url,canonical_url,title,status FROM site_pages ORDER BY id DESC LIMIT 10'}},
  {type:'execute',stmt:{sql:'PRAGMA foreign_key_list(site_pages)'}},
+ {type:'execute',stmt:{sql:"SELECT sql FROM sqlite_master WHERE name='site_pages'"}},
  {type:'close'}
 ];
 const response=await fetch(`${base}/v2/pipeline`,{method:'POST',headers:{authorization:`Bearer ${token}`,'content-type':'application/json'},body:JSON.stringify({requests})});
@@ -25,4 +26,4 @@ const values=(index)=>rows(index).map(row=>Object.fromEntries(cols(index).map((c
 const productionFields={sites:values(2).map(x=>x.name),site_pages:values(3).map(x=>x.name),site_search_fts:values(4).map(x=>x.name)};
 const required={sites:['url','name','status'],site_pages:['site_id','url','title','description','content_hash','http_status','crawl_status']};
 const missing=Object.fromEntries(Object.entries(required).map(([table,fields])=>[table,fields.filter(x=>!productionFields[table].includes(x))]));
-console.log(JSON.stringify({ok:true,health:values(0),objects:values(1),productionFields,diagnosticPages:values(5),diagnosticFts:values(6),diagnosticSites:values(7),recentPages:values(8),pageForeignKeys:values(9),missing,writePerformed:false},null,2));
+console.log(JSON.stringify({ok:true,health:values(0),objects:values(1),productionFields,diagnosticPages:values(5),diagnosticFts:values(6),diagnosticSites:values(7),recentPages:values(8),pageForeignKeys:values(9),pageSchema:values(10),missing,writePerformed:false},null,2));
