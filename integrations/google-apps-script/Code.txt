@@ -1,82 +1,50 @@
 /*
   Baheth Masr Crawler - Google Sheets staging receiver
-  الاستخدام:
-  1) الصق الملف كاملًا في Apps Script.
-  2) شغّل resetEverything() مرة واحدة لمسح كل التبويبات وإنشاء CrawlResults.
-  3) شغّل setCrawlerToken('رمز-سري-طويل') مرة واحدة.
-  4) انشره Web App ثم استخدم رابط /exec مع الزاحف.
+  1) شغّل resetEverything() مرة واحدة لمسح كل شيء وإنشاء CrawlResults.
+  2) شغّل setCrawlerToken('رمز-سري-طويل') مرة واحدة.
+  3) انشره Web App.
 */
 
 const SHEET_NAME = 'CrawlResults';
 const HEADERS = [
-  'result_id','run_type','requested_url','canonical_url','response_url','http_status','crawl_status',
-  'content_type','content_length','title','description','summary','search_snippet','icon_url',
-  'extracted_text','content_hash','links_json','internal_links_json','external_links_json',
-  'social_links_json','discovered_links_count','duration_ms','error_message','fetched_at'
+  'result_id','run_type','source_run_id','requested_url','canonical_url','response_url','http_status','crawl_status',
+  'content_type','content_length','title','description','summary','search_snippet','icon_url','extracted_text',
+  'content_hash','links_json','internal_links_json','external_links_json','social_links_json',
+  'discovered_links_count','duration_ms','error_message','fetched_at'
 ];
 
-// يمسح كل التبويبات والبيانات ثم ينشئ جدولًا واحدًا نظيفًا.
 function resetEverything() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheets = ss.getSheets();
   const first = sheets[0] || ss.insertSheet(SHEET_NAME);
-  sheets.forEach((sheet) => {
-    if (sheet.getSheetId() !== first.getSheetId()) ss.deleteSheet(sheet);
-  });
-  first.clear();
-  first.setName(SHEET_NAME);
-  first.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]);
-  first.setFrozenRows(1);
-  first.getRange(1, 1, 1, HEADERS.length).setFontWeight('bold');
-  first.getDataRange().setWrap(true);
-  return 'تم المسح وإنشاء تبويب CrawlResults بالأعمدة المطلوبة';
+  sheets.forEach((sheet) => { if (sheet.getSheetId() !== first.getSheetId()) ss.deleteSheet(sheet); });
+  first.clear(); first.setName(SHEET_NAME);
+  first.getRange(1,1,1,HEADERS.length).setValues([HEADERS]);
+  first.setFrozenRows(1); first.getRange(1,1,1,HEADERS.length).setFontWeight('bold'); first.getDataRange().setWrap(true);
+  return 'تم المسح وإنشاء جدول CrawlResults';
 }
 
-// دالة بديلة لإنشاء الجدول دون مسح البيانات الموجودة.
 function setupSheet() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  let sheet = ss.getSheetByName(SHEET_NAME);
-  if (!sheet) sheet = ss.insertSheet(SHEET_NAME);
-  if (sheet.getLastRow() === 0) sheet.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]);
-  sheet.setFrozenRows(1);
-  sheet.getRange(1, 1, 1, HEADERS.length).setFontWeight('bold');
-  return 'CrawlResults جاهز';
+  const ss=SpreadsheetApp.getActiveSpreadsheet(); let sheet=ss.getSheetByName(SHEET_NAME)||ss.insertSheet(SHEET_NAME);
+  if(sheet.getLastRow()===0)sheet.getRange(1,1,1,HEADERS.length).setValues([HEADERS]);
+  sheet.setFrozenRows(1); sheet.getRange(1,1,1,HEADERS.length).setFontWeight('bold'); return 'CrawlResults جاهز';
 }
 
-// شغّلها مرة واحدة فقط، ولا ترسل الرمز داخل GitHub.
-function setCrawlerToken(token) {
-  PropertiesService.getScriptProperties().setProperty('CRAWLER_TOKEN', String(token));
-  return 'تم حفظ رمز الحماية';
-}
+function setCrawlerToken(token) { PropertiesService.getScriptProperties().setProperty('CRAWLER_TOKEN',String(token)); return 'تم حفظ رمز الحماية'; }
+function doGet() { return json_({ok:true,service:'baheth-masr-crawler-sheets',sheet:SHEET_NAME}); }
 
-function doGet() {
-  return json_({ ok: true, service: 'baheth-masr-crawler-sheets', sheet: SHEET_NAME });
-}
-
-// يستقبل نتيجة تشغيل يدوي ويضيفها في صف جديد.
 function doPost(e) {
   try {
-    const body = JSON.parse((e && e.postData && e.postData.contents) || '{}');
-    const expected = PropertiesService.getScriptProperties().getProperty('CRAWLER_TOKEN');
-    if (expected && body.token !== expected) return json_({ ok: false, error: 'unauthorized' });
-    setupSheet();
-    const rows = Array.isArray(body.results) ? body.results : [];
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
-    const values = rows.map((r) => [
-      r.id || '', r.run_type || body.run_type || 'manual', r.requested_url || '', r.canonical_url || '',
-      r.response_url || '', r.http_status || '', r.crawl_status || '', r.content_type || '',
-      r.content_length || 0, r.title || '', r.description || '', r.summary || '', r.search_snippet || '',
-      r.icon_url || '', r.extracted_text || '', r.content_hash || '', r.links_json || '[]',
-      r.internal_links_json || '[]', r.external_links_json || '[]', r.social_links_json || '[]',
-      r.discovered_links_count || 0, r.duration_ms || 0, r.error_message || '', r.fetched_at || new Date().toISOString()
-    ]);
-    if (values.length) sheet.getRange(sheet.getLastRow() + 1, 1, values.length, HEADERS.length).setValues(values);
-    return json_({ ok: true, rows_added: values.length, sheet: SHEET_NAME });
-  } catch (error) {
-    return json_({ ok: false, error: String(error) });
-  }
+    const body=JSON.parse((e&&e.postData&&e.postData.contents)||'{}'); const expected=PropertiesService.getScriptProperties().getProperty('CRAWLER_TOKEN');
+    if(expected&&body.token!==expected)return json_({ok:false,error:'unauthorized'});
+    setupSheet(); const rows=Array.isArray(body.results)?body.results:[]; const sheet=SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
+    const existing=sheet.getLastRow()>1?sheet.getRange(2,1,sheet.getLastRow()-1,3).getValues():[]; const keys={}; existing.forEach(r=>{keys[`${r[0]}|${r[2]}`]=true;});
+    const values=[]; let skipped=0;
+    rows.forEach(r=>{const key=`${r.id||''}|${r.source_run_id||body.source_run_id||''}`;if(keys[key]){skipped++;return;}keys[key]=true;values.push([
+      r.id||'',r.run_type||body.run_type||'manual',r.source_run_id||body.source_run_id||'',r.requested_url||'',r.canonical_url||'',r.response_url||'',r.http_status||'',r.crawl_status||'',r.content_type||'',r.content_length||0,r.title||'',r.description||'',r.summary||'',r.search_snippet||'',r.icon_url||'',r.extracted_text||'',r.content_hash||'',r.links_json||'[]',r.internal_links_json||'[]',r.external_links_json||'[]',r.social_links_json||'[]',r.discovered_links_count||0,r.duration_ms||0,r.error_message||'',r.fetched_at||new Date().toISOString()
+    ]);});
+    if(values.length)sheet.getRange(sheet.getLastRow()+1,1,values.length,HEADERS.length).setValues(values);
+    return json_({ok:true,rows_added:values.length,rows_skipped_duplicate:skipped,sheet:SHEET_NAME});
+  } catch(error){return json_({ok:false,error:String(error)});}
 }
-
-function json_(value) {
-  return ContentService.createTextOutput(JSON.stringify(value)).setMimeType(ContentService.MimeType.JSON);
-}
+function json_(value){return ContentService.createTextOutput(JSON.stringify(value)).setMimeType(ContentService.MimeType.JSON);}
