@@ -29,6 +29,11 @@ on:
         description: Number of crawl passes to fetch discovered pages
         required: true
         default: '1'
+      drain_discoveries:
+        description: Crawl discovered pages until the queue is empty
+        required: true
+        default: 'false'
+        type: boolean
   schedule:
     - cron: '30 0 * * *'
     - cron: '0 1 * * 5'
@@ -41,6 +46,7 @@ jobs:
       CRAWLER_LIMIT: ${{ github.event.inputs.limit || '10' }}
       CRAWLER_MANUAL_URL: ${{ github.event.inputs.manual_url || '' }}
       CRAWLER_DDG_QUERIES: ${{ github.event.inputs.ddg_queries || '' }}
+      CRAWLER_DRAIN_DISCOVERIES: ${{ github.event.inputs.drain_discoveries == 'true' && '1' || '0' }}
       CRAWLER_INPUT_DB_PATH: db/links.sqlite
       CRAWLER_RESULTS_DB_PATH: db/results.sqlite
       TURSO_CRAWLER_DATABASE_URL: libsql://alzahf-karamkkr.aws-eu-west-1.turso.io
