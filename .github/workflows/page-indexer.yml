@@ -13,7 +13,7 @@ on:
         required: false
         default: '500'
 concurrency:
-  group: baheth-page-indexer
+  group: baheth-crawler-staging
   cancel-in-progress: false
 permissions:
   contents: read
