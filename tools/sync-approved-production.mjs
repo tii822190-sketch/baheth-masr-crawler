@@ -5,6 +5,7 @@ const productionToken = process.env.TURSO_PRODUCTION_AUTH_TOKEN;
 if (!stagingUrl || !stagingToken || !productionUrl || !productionToken) throw new Error('All staging and production Turso credentials are required');
 const endpoint = (value) => value.replace(/^libsql:\/\//, 'https://').replace(/^turso:\/\//, 'https://').replace(/\/$/, '') + '/v2/pipeline';
 const scalar = (value) => value?.value ?? null;
+const arg = (type, value) => ({ type, value: String(value ?? '') });
 async function pipeline(url, token, requests, label = 'database') {
   const response = await fetch(endpoint(url), { method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: JSON.stringify({ requests: [...requests, { type: 'close' }] }) });
   const body = await response.json();
@@ -23,7 +24,6 @@ const source = await pipeline(stagingUrl, stagingToken, [{ type: 'execute', stmt
 const result = source[0].response.result;
 const rows = result.rows.map((row) => Object.fromEntries(result.cols.map((column, index) => [column.name, scalar(row[index])] )));
 if (!rows.length) throw Error('No approved staging rows available');
-const arg = (type, value) => ({ type, value: String(value ?? '') });
 const categoryPriority = (category) => ({ quran: 95, religion: 90, government: 85, education: 80, health: 75, hospital: 75, healthcare: 75, news: 65, other: 50 }[String(category || 'other').toLowerCase()] || 50);
 const rootUrl = new URL(rows[0].canonical_url).origin + '/';
 const rootRow = rows.find((row) => row.canonical_url === rootUrl) || rows[0];
