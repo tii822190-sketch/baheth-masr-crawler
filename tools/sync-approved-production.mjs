@@ -5,15 +5,18 @@ const productionToken = process.env.TURSO_PRODUCTION_AUTH_TOKEN;
 if (!stagingUrl || !stagingToken || !productionUrl || !productionToken) throw new Error('All staging and production Turso credentials are required');
 const endpoint = (value) => value.replace(/^libsql:\/\//, 'https://').replace(/^turso:\/\//, 'https://').replace(/\/$/, '') + '/v2/pipeline';
 const scalar = (value) => value?.value ?? null;
-async function pipeline(url, token, requests) {
+async function pipeline(url, token, requests, label = 'database') {
   const response = await fetch(endpoint(url), { method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: JSON.stringify({ requests: [...requests, { type: 'close' }] }) });
   const body = await response.json();
   if (!response.ok) throw Error(`HTTP ${response.status}`);
   const errors = (body.results || []).filter((item) => item.type === 'error' || item.response?.error);
-  if (errors.length) throw Error(`SQL error: ${JSON.stringify(errors)}`);
+  if (errors.length) {
+    const details = errors.map((item) => ({ index: body.results.indexOf(item), sql: requests[body.results.indexOf(item)]?.stmt?.sql?.slice(0, 180), error: item.response?.error || item.error }));
+    throw Error(`${label} SQL error: ${JSON.stringify(details)}`);
+  }
   return body.results || [];
 }
-const source = await pipeline(stagingUrl, stagingToken, [{ type: 'execute', stmt: { sql: `SELECT r.id,r.requested_url,r.canonical_url,r.title,r.description,r.extracted_text,r.search_text,r.icon_url,r.content_hash,r.http_status,v.validation_status,r.category_candidate,r.subcategory_candidates_json,r.classification_confidence FROM crawl_results r JOIN crawl_review_items v ON v.result_id=r.id WHERE r.distribution_status='approved' AND v.validation_status='approved' AND length(trim(r.title))>0 AND length(trim(r.description))>0 AND length(trim(r.extracted_text))>=300 ORDER BY r.id` } }]);
+const source = await pipeline(stagingUrl, stagingToken, [{ type: 'execute', stmt: { sql: `SELECT r.id,r.requested_url,r.canonical_url,r.title,r.description,r.extracted_text,r.search_text,r.icon_url,r.content_hash,r.http_status,v.validation_status,r.category_candidate,r.subcategory_candidates_json,r.classification_confidence FROM crawl_results r JOIN crawl_review_items v ON v.result_id=r.id WHERE r.distribution_status='approved' AND v.validation_status='approved' AND length(trim(r.title))>0 AND length(trim(r.description))>0 AND length(trim(r.extracted_text))>=300 ORDER BY r.id` } }], 'staging');
 const result = source[0].response.result;
 const rows = result.rows.map((row) => Object.fromEntries(result.cols.map((column, index) => [column.name, scalar(row[index])] )));
 if (!rows.length) throw Error('No approved staging rows available');
@@ -47,7 +50,7 @@ requests.push({ type: 'execute', stmt: { sql: `DELETE FROM site_search_fts_v2 WH
 requests.push({ type: 'execute', stmt: { sql: `INSERT INTO site_search_fts_v2 (record_type,record_id,site_id,priority,title,description,content,keywords,categories,search_text) SELECT 'site',CAST(id AS TEXT),id,priority,name,description,'',keywords,categories,search_text FROM sites WHERE canonical_url=?`, args: [arg('text', rootUrl)] } });
 requests.push({ type: 'execute', stmt: { sql: `SELECT COUNT(DISTINCT canonical_url) AS pages FROM site_pages WHERE site_id=(SELECT id FROM sites WHERE canonical_url=?) AND status='active'`, args: [arg('text', rootUrl)] } });
 requests.push({ type: 'execute', stmt: { sql: `SELECT COUNT(DISTINCT record_type || ':' || record_id) AS fts FROM site_search_fts_v2 WHERE site_id=(SELECT id FROM sites WHERE canonical_url=?)`, args: [arg('text', rootUrl)] } });
-const output = await pipeline(productionUrl, productionToken, requests);
+const output = await pipeline(productionUrl, productionToken, requests, 'production');
 const pages = output.at(-3)?.response?.result?.rows?.[0]?.[0]?.value ?? null;
 const fts = output.at(-2)?.response?.result?.rows?.[0]?.[0]?.value ?? null;
 if (Number(pages) < rows.length || Number(fts) < rows.length) throw Error(`Bulk verification failed: pages=${pages}, fts=${fts}, approved=${rows.length}`);
