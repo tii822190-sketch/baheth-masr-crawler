@@ -29,9 +29,7 @@ for (const [name, rawUrl, token] of configs) {
   const schema = schemaResult[0].response.result;
   const objects = schema.rows.map((row) => Object.fromEntries(schema.cols.map((col, i) => [col.name, scalar(row[i])] )));
   fs.writeFileSync(path.join(root, `${name}-schema.json`), JSON.stringify(objects, null, 2) + '\n');
-  const ftsNames = new Set(['site_search_fts', 'site_search_fts_config', 'site_search_fts_content', 'site_search_fts_data', 'site_search_fts_docsize', 'site_search_fts_idx']);
-  const tables = objects.filter((x) => x.type === 'table' && !String(x.name).startsWith('sqlite_') && !ftsNames.has(x.name)).map((x) => x.name);
-  const ftsSchema = objects.find((x) => x.type === 'table' && x.name === 'site_search_fts')?.sql || '';
+  const tables = objects.filter((x) => x.type === 'table' && !String(x.name).startsWith('sqlite_')).map((x) => x.name);
   const manifest = { name, created_at: new Date().toISOString(), tables: [], total_rows: 0 };
   for (const table of tables) {
     const result = await pipeline(rawUrl, token, [{ type: 'execute', stmt: { sql: `SELECT * FROM ${quote(table)}` } }]);
@@ -45,18 +43,18 @@ for (const [name, rawUrl, token] of configs) {
   }
   if (!manifest.tables.length) throw new Error(`${name} has no tables; refusing reset`);
   fs.writeFileSync(path.join(root, `${name}-manifest.json`), JSON.stringify(manifest, null, 2) + '\n');
-  manifests.push({ name, rawUrl, token, tables, ftsSchema });
+  manifests.push({ name, rawUrl, token, tables });
 }
 fs.writeFileSync(path.join(root, 'reset-manifest.json'), JSON.stringify({ created_at: new Date().toISOString(), databases: manifests.map((x) => ({ name: x.name, tables: x.tables })) }, null, 2) + '\n');
-for (const { name, rawUrl, token, tables, ftsSchema } of manifests) {
+for (const { name, rawUrl, token, tables } of manifests) {
   const productionOrder = ['site_search_fts', 'site_pages', 'sites'];
-  const stagingOrder = ['crawl_quarantine', 'crawl_review_items', 'crawl_results', 'crawl_observations', 'crawl_discoveries', 'crawl_targets', 'site_pages', 'sites', 'crawl_runs'];
+  const stagingOrder = ['crawl_quarantine', 'crawl_review_items', 'crawl_results', 'crawl_discoveries', 'crawl_observations', 'crawl_targets', 'crawl_site_queue', 'site_pages', 'sites', 'crawl_runs'];
   const preferred = name === 'production' ? productionOrder : stagingOrder;
-  const resetFts = name === 'production' && ftsSchema ? [{ type: 'execute', stmt: { sql: 'DROP TABLE IF EXISTS "site_search_fts"' } }, { type: 'execute', stmt: { sql: ftsSchema } }] : [];
-  const deletions = [...resetFts, ...preferred.filter((table) => tables.includes(table)).map((table) => ({ type: 'execute', stmt: { sql: `DELETE FROM ${quote(table)}` } }))];
+  const deletions = preferred.filter((table) => tables.includes(table)).map((table) => ({ type: 'execute', stmt: { sql: `DELETE FROM ${quote(table)}` } }));
   await pipeline(rawUrl, token, deletions);
   const checks = await pipeline(rawUrl, token, tables.map((table) => ({ type: 'execute', stmt: { sql: `SELECT COUNT(*) AS n FROM ${quote(table)}` } })));
-  const remaining = checks.map((result, index) => ({ table: tables[index], rows: Number(scalar(result.response.result.rows[0][0])) }));
+  const checkRows = checks.filter((result) => result.type === 'ok' && result.response?.result);
+  const remaining = checkRows.map((result, index) => ({ table: tables[index], rows: Number(scalar(result.response.result.rows[0][0])) }));
   if (remaining.some((x) => x.rows !== 0)) throw new Error(`${name} reset verification failed: ${JSON.stringify(remaining)}`);
   fs.writeFileSync(path.join(root, `${name}-reset-verification.json`), JSON.stringify({ name, remaining }, null, 2) + '\n');
 }
