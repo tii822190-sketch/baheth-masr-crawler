@@ -1,0 +1,32 @@
+name: Baheth Masr Production Backup
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    env:
+      TURSO_PRODUCTION_DATABASE_URL: ${{ secrets.TURSO_PRODUCTION_DATABASE_URL }}
+      TURSO_PRODUCTION_AUTH_TOKEN: ${{ secrets.TURSO_PRODUCTION_AUTH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Create complete production backup
+        run: node tools/backup-production.mjs
+      - name: Verify backup archive
+        run: sha256sum -c production-backup.tar.gz.sha256 && tar -tzf production-backup.tar.gz >/dev/null && node -e "const x=require('./backup-output/manifest.json'); if (!x.tables.length || !x.total_rows) throw new Error('Empty backup'); console.log(JSON.stringify({tables:x.tables.length,total_rows:x.total_rows},null,2))"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: baheth-masr-production-backup-${{ github.run_id }}
+          path: |
+            production-backup.tar.gz
+            production-backup.tar.gz.sha256
+            backup-output/manifest.json
+            backup-output/schema.json
+          retention-days: 90
