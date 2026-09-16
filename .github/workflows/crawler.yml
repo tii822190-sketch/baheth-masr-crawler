@@ -34,6 +34,10 @@ on:
         required: true
         default: 'false'
         type: boolean
+      batch_size:
+        description: Pages per checkpoint batch
+        required: false
+        default: '50'
 permissions:
   contents: read
 jobs:
@@ -47,6 +51,7 @@ jobs:
       CRAWLER_MANUAL_ONLY: '1'
       CRAWLER_CONCURRENCY: '10'
       CRAWLER_FETCH_MODE: 'hybrid'
+      CRAWLER_BATCH_SIZE: ${{ github.event.inputs.batch_size || '50' }}
       CRAWLER_INPUT_DB_PATH: db/links.sqlite
       CRAWLER_RESULTS_DB_PATH: db/results.sqlite
       TURSO_CRAWLER_DATABASE_URL: libsql://alzahf-karamkkr.aws-eu-west-1.turso.io

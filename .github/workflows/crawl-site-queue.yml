@@ -14,6 +14,10 @@ on:
         description: Comma-separated URLs to add when queue_action is add
         required: false
         default: ''
+      batch_size:
+        description: Pages per checkpoint batch
+        required: false
+        default: '50'
 concurrency:
   group: baheth-crawler-queue
   cancel-in-progress: false
@@ -35,6 +39,8 @@ jobs:
       CRAWLER_MANUAL_ONLY: '1'
       CRAWLER_CONCURRENCY: '10'
       CRAWLER_FETCH_MODE: 'hybrid'
+      CRAWLER_BATCH_SIZE: ${{ inputs.batch_size || '50' }}
+      CRAWLER_MAX_BATCHES: '200'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -62,16 +68,29 @@ jobs:
         env:
           QUEUE_URL: ${{ steps.claim.outputs.queue_url }}
         run: echo "CRAWLER_MANUAL_URL=$QUEUE_URL" >> "$GITHUB_ENV"
-      - name: Crawl and checkpoint one site
+      - name: Crawl site in checkpoint batches
         if: steps.claim.outputs.claimed == 'true'
         run: |
           set -e
-          node crawler/src/cli.mjs manual
-          node tools/validate-staging.mjs
-          node tools/sync-turso-staging.mjs
-          node tools/sync-approved-production.mjs
+          complete=false
+          for batch in $(seq 1 "$CRAWLER_MAX_BATCHES"); do
+            echo "Starting page batch $batch/$CRAWLER_MAX_BATCHES (size=$CRAWLER_BATCH_SIZE)"
+            node crawler/src/cli.mjs manual
+            node tools/validate-staging.mjs
+            node tools/sync-turso-staging.mjs
+            node tools/sync-approved-production.mjs
+            status=$(node tools/crawl-local-status.mjs)
+            echo "$status"
+            pending=$(node -e "const x=JSON.parse(process.argv[1]); console.log(Number(x.pending)+Number(x.queued)+Number(x.pending_targets))" "$status")
+            if [ "$pending" -eq 0 ]; then complete=true; break; fi
+          done
+          if [ "$complete" != true ]; then
+            echo 'Maximum batches reached; site remains processing for the next scheduled run.'
+            exit 0
+          fi
+          echo 'CRAWLER_SITE_COMPLETE=true' >> "$GITHUB_ENV"
       - name: Mark site done
-        if: success() && steps.claim.outputs.claimed == 'true'
+        if: success() && steps.claim.outputs.claimed == 'true' && env.CRAWLER_SITE_COMPLETE == 'true'
         env:
           QUEUE_ID: ${{ steps.claim.outputs.queue_id }}
         run: node tools/crawl-queue.mjs done "$QUEUE_ID"

@@ -43,7 +43,7 @@ if (command === 'add') {
   console.log(JSON.stringify(rows(results[0]), null, 2));
 } else if (command === 'claim') {
   const results = await pipeline([
-    { sql: `UPDATE crawl_site_queue SET status='processing',attempts=attempts+1,last_started_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP,last_error='' WHERE id=(SELECT id FROM crawl_site_queue WHERE status IN ('pending','failed') OR (status='processing' AND last_started_at < datetime('now','-2 hours')) ORDER BY id LIMIT 1)`, args: [] },
+    { sql: `UPDATE crawl_site_queue SET status='processing',attempts=attempts+1,last_started_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP,last_error='' WHERE id=(SELECT id FROM crawl_site_queue WHERE status IN ('pending','failed','processing') ORDER BY CASE status WHEN 'processing' THEN 0 WHEN 'pending' THEN 1 ELSE 2 END,id LIMIT 1)`, args: [] },
     { sql: `SELECT id,url FROM crawl_site_queue WHERE status='processing' ORDER BY last_started_at DESC,id DESC LIMIT 1`, args: [] },
   ]);
   const row = rows(results[1])[0];
