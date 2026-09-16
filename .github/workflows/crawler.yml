@@ -21,18 +21,18 @@ on:
         required: false
         default: ''
       sync_production:
-        description: Sync approved rows to production (manual confirmation required)
+        description: Sync approved rows to production database 1 after every batch
         required: true
-        default: 'false'
+        default: 'true'
         type: boolean
       passes:
-        description: Number of crawl passes to fetch discovered pages
+        description: Number of 50-page batches to process (up to max_pages)
         required: true
-        default: '1'
+        default: '10'
       drain_discoveries:
         description: Crawl discovered pages until the queue is empty
         required: true
-        default: 'false'
+        default: 'true'
         type: boolean
       batch_size:
         description: Pages per checkpoint batch
@@ -55,6 +55,8 @@ jobs:
       CRAWLER_MANUAL_ONLY: '1'
       CRAWLER_CONCURRENCY: '10'
       CRAWLER_FETCH_MODE: 'hybrid'
+      CRAWLER_SOURCE: 'unindexed_pages'
+      CRAWLER_ONE_BATCH: '1'
       CRAWLER_BATCH_SIZE: ${{ github.event.inputs.batch_size || '50' }}
       CRAWLER_MAX_PAGES: ${{ github.event.inputs.max_pages || '500' }}
       CRAWLER_INPUT_DB_PATH: db/links.sqlite
@@ -97,16 +99,26 @@ jobs:
             echo "Checkpointing crawl pass $pass/$CRAWLER_PASSES"
             node tools/validate-staging.mjs
             node tools/sync-turso-staging.mjs
-            if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.event.inputs.sync_production }}" = "true" ]; then
-              node tools/sync-approved-production.mjs
+            if [ "${{ github.event.inputs.sync_production || 'true' }}" = "true" ]; then
+              if ! sync_output=$(node tools/sync-approved-production.mjs 2>&1); then
+                echo "$sync_output"
+                if ! echo "$sync_output" | grep -q 'No approved staging rows available'; then exit 1; fi
+              else
+                echo "$sync_output"
+              fi
             fi
           done
       - name: Final checkpoint verification
         run: |
           node tools/validate-staging.mjs
           node tools/sync-turso-staging.mjs
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.event.inputs.sync_production }}" = "true" ]; then
-            node tools/sync-approved-production.mjs
+          if [ "${{ github.event.inputs.sync_production || 'true' }}" = "true" ]; then
+            if ! sync_output=$(node tools/sync-approved-production.mjs 2>&1); then
+              echo "$sync_output"
+              if ! echo "$sync_output" | grep -q 'No approved staging rows available'; then exit 1; fi
+            else
+              echo "$sync_output"
+            fi
           fi
       - uses: actions/upload-artifact@v4
         if: always()
