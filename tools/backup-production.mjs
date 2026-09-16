@@ -22,7 +22,9 @@ const schemaResult = await pipeline([{ type: 'execute', stmt: { sql: "SELECT typ
 const schema = schemaResult[0].response.result;
 const objects = schema.rows.map((row) => Object.fromEntries(schema.cols.map((col, i) => [col.name, scalar(row[i])] )));
 fs.writeFileSync(path.join(root, 'schema.json'), JSON.stringify(objects, null, 2) + '\n');
-const tables = objects.filter((item) => item.type === 'table' && !item.name.startsWith('sqlite_')).map((item) => item.name);
+// FTS5 shadow tables are implementation details and may be unreadable when the index is corrupt.
+// The durable source of truth is sites/site_pages; FTS is rebuilt from those tables during recovery.
+const tables = objects.filter((item) => item.type === 'table' && !item.name.startsWith('sqlite_') && !item.name.startsWith('site_search_fts')).map((item) => item.name);
 const manifest = { created_at: new Date().toISOString(), tables: [], total_rows: 0 };
 for (const table of tables) {
   const quoted = table.replaceAll('"', '""');
