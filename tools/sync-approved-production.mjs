@@ -23,7 +23,10 @@ const runArgs = syncRunId > 0 ? [arg('integer', syncRunId)] : [];
 const source = await pipeline(stagingUrl, stagingToken, [{ type: 'execute', stmt: { sql: `SELECT r.id,r.requested_url,r.canonical_url,r.title,r.description,r.extracted_text,r.search_text,r.icon_url,r.content_hash,r.http_status,v.validation_status,r.category_candidate,r.subcategory_candidates_json,r.classification_confidence FROM crawl_results r JOIN crawl_review_items v ON v.result_id=r.id WHERE r.distribution_status='approved' AND v.validation_status='approved' AND length(trim(r.title))>0 AND length(trim(r.description))>0 AND length(trim(r.extracted_text))>=200${runFilter} ORDER BY r.id`, args: runArgs } }], 'staging');
 const result = source[0].response.result;
 const rows = result.rows.map((row) => Object.fromEntries(result.cols.map((column, index) => [column.name, scalar(row[index])] )));
-if (!rows.length) throw Error('No approved staging rows available');
+if (!rows.length) {
+  console.log(JSON.stringify({ ok: true, approved_rows: 0, skipped: true, reason: 'no_approved_staging_rows' }, null, 2));
+  process.exit(0);
+}
 const categoryPriority = (category) => ({ quran: 95, religion: 90, government: 85, education: 80, health: 75, hospital: 75, healthcare: 75, news: 65, other: 50 }[String(category || 'other').toLowerCase()] || 50);
 const rootUrl = new URL(rows[0].canonical_url).origin + '/';
 const rootRow = rows.find((row) => row.canonical_url === rootUrl) || rows[0];

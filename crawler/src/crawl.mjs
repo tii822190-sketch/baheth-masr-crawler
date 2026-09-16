@@ -14,6 +14,7 @@ const batchSize = Math.max(1, Math.min(maxPages, Number(process.env.CRAWLER_BATC
 const fetchMode = process.env.CRAWLER_FETCH_MODE || 'browser';
 const sourceMode = process.env.CRAWLER_SOURCE || 'active_sites';
 const oneBatch = process.env.CRAWLER_ONE_BATCH === '1';
+const retryFailed = process.env.CRAWLER_RETRY_FAILED === '1';
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 function createRun(type) { return db.prepare(`INSERT INTO crawl_runs (run_type,status,started_at,target_count) VALUES (?, 'running', CURRENT_TIMESTAMP, 0)`).run(type).lastInsertRowid; }
 function hasResultsTable() { return Boolean(resultsDb.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='crawl_results'").get()); }
@@ -31,7 +32,8 @@ function createTargets(runId, runType) {
   if (sourceMode === 'unindexed_pages') {
     const pendingTargets = db.prepare("SELECT id FROM crawl_targets WHERE status IN ('queued','processing') ORDER BY priority DESC,id LIMIT ?").all(maxPages);
     if (pendingTargets.length) { const ids = pendingTargets.map((target) => target.id); const placeholders = ids.map(() => '?').join(','); db.prepare(`UPDATE crawl_targets SET run_id=? WHERE id IN (${placeholders})`).run(runId, ...ids); db.prepare('UPDATE crawl_runs SET target_count=? WHERE id=?').run(pendingTargets.length, runId); return pendingTargets.length; }
-    const candidates = db.prepare(`SELECT p.id AS page_id,p.site_id,p.url FROM site_pages p WHERE p.url <> '' AND COALESCE(p.crawl_status,'pending') NOT IN ('indexed','success') AND NOT EXISTS (SELECT 1 FROM crawl_targets t WHERE t.run_id=? AND t.canonical_url=p.url) ORDER BY p.id LIMIT ?`).all(runId, maxPages);
+    const statusClause = retryFailed ? "COALESCE(p.crawl_status,'pending') NOT IN ('indexed','success')" : "COALESCE(p.crawl_status,'pending') IN ('pending','queued')";
+    const candidates = db.prepare(`SELECT p.id AS page_id,p.site_id,p.url FROM site_pages p WHERE p.url <> '' AND ${statusClause} AND NOT EXISTS (SELECT 1 FROM crawl_targets t WHERE t.run_id=? AND t.canonical_url=p.url) ORDER BY p.id LIMIT ?`).all(runId, maxPages);
     const pages = candidates.filter((page) => !isApproved(canonicalize(page.url)));
     const insert = db.prepare(`INSERT INTO crawl_targets (run_id,target_type,site_id,page_id,url,canonical_url,parent_url,priority,reason) VALUES (?, 'page', ?, ?, ?, ?, '', ?, ?)`);
     for (const page of pages) { const canonical = canonicalize(page.url); if (canonical) insert.run(runId, page.site_id, page.page_id, page.url, canonical, 60, 'unindexed_page'); }
