@@ -17,6 +17,7 @@ jobs:
       CRAWLER_INPUT_DB_PATH: db/links.sqlite
       DISCOVERY_MAX_SITES: '25'
       DISCOVERY_MAX_PAGES_PER_SITE: '500'
+      DISCOVERY_CHECKPOINT_SIZE: '500'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
