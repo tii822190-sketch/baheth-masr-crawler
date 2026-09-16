@@ -81,7 +81,12 @@ jobs:
             node crawler/src/cli.mjs manual
             node tools/validate-staging.mjs
             node tools/sync-turso-staging.mjs
-            node tools/sync-approved-production.mjs
+            if ! sync_output=$(node tools/sync-approved-production.mjs 2>&1); then
+              echo "$sync_output"
+              if ! echo "$sync_output" | grep -q 'No approved staging rows available'; then exit 1; fi
+            else
+              echo "$sync_output"
+            fi
             status=$(node tools/crawl-local-status.mjs)
             echo "$status"
             pending=$(node -e "const x=JSON.parse(process.argv[1]); console.log(Number(x.pending)+Number(x.queued)+Number(x.pending_targets))" "$status")
