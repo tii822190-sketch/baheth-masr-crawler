@@ -34,11 +34,13 @@ function scoreEntry(text, title, description, entry) {
   return { score, reasons };
 }
 
-export function classifyContent({ title = '', description = '', summary = '', extractedText = '' } = {}) {
+export function classifyContent({ title = '', description = '', summary = '', extractedText = '', sourceUrl = '' } = {}) {
   const normalizedTitle = normalize(title);
   const normalizedDescription = normalize(description);
   const normalizedText = normalize(`${summary} ${extractedText}`);
   const candidates = [];
+
+  const sourceHint = normalize(sourceUrl);
 
   for (const category of taxonomy.categories) {
     const categoryScore = scoreEntry(`${normalizedTitle} ${normalizedDescription} ${normalizedText}`, normalizedTitle, normalizedDescription, category);
@@ -54,6 +56,16 @@ export function classifyContent({ title = '', description = '', summary = '', ex
       reasons: categoryScore.reasons,
       subcategories: subcategories.map(({ id, score: subScore, reasons: subReasons }) => ({ id, score: subScore, reasons: subReasons })),
     });
+  }
+
+  if (/holyquranradio|quranradio|اذاعة القرآن|راديو القرآن/.test(`${sourceHint} ${normalizedTitle} ${normalizedText}`)) {
+    const quran = candidates.find((candidate) => candidate.category === 'quran');
+    if (quran) {
+      quran.score += 20;
+      quran.reasons.push({ keyword: 'quran_radio_source', titleHits: 0, descriptionHits: 0, textHits: 1, points: 20 });
+    } else {
+      candidates.push({ category: 'quran', score: 20, reasons: [{ keyword: 'quran_radio_source', titleHits: 0, descriptionHits: 0, textHits: 1, points: 20 }], subcategories: [{ id: 'quran_audio', score: 20, reasons: [] }] });
+    }
   }
 
   candidates.sort((a, b) => b.score - a.score || a.category.localeCompare(b.category));
