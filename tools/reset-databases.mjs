@@ -47,7 +47,10 @@ for (const [name, rawUrl, token] of configs) {
 }
 fs.writeFileSync(path.join(root, 'reset-manifest.json'), JSON.stringify({ created_at: new Date().toISOString(), databases: manifests.map((x) => ({ name: x.name, tables: x.tables })) }, null, 2) + '\n');
 for (const { name, rawUrl, token, tables } of manifests) {
-  const deletions = [...tables].reverse().map((table) => ({ type: 'execute', stmt: { sql: `DELETE FROM ${quote(table)}` } }));
+  const productionOrder = ['site_search_fts', 'site_pages', 'sites'];
+  const stagingOrder = ['crawl_quarantine', 'crawl_review_items', 'crawl_results', 'crawl_observations', 'crawl_discoveries', 'crawl_targets', 'site_pages', 'sites', 'crawl_runs'];
+  const preferred = name === 'production' ? productionOrder : stagingOrder;
+  const deletions = preferred.filter((table) => tables.includes(table)).map((table) => ({ type: 'execute', stmt: { sql: `DELETE FROM ${quote(table)}` } }));
   await pipeline(rawUrl, token, deletions);
   const checks = await pipeline(rawUrl, token, tables.map((table) => ({ type: 'execute', stmt: { sql: `SELECT COUNT(*) AS n FROM ${quote(table)}` } })));
   const remaining = checks.map((result, index) => ({ table: tables[index], rows: Number(scalar(result.response.result.rows[0][0])) }));
