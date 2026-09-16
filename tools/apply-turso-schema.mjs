@@ -4,7 +4,7 @@ const rawUrl = process.env.TURSO_CRAWLER_DATABASE_URL;
 const token = process.env.TURSO_CRAWLER_AUTH_TOKEN;
 if (!rawUrl || !token) throw new Error('TURSO_CRAWLER_DATABASE_URL and TURSO_CRAWLER_AUTH_TOKEN are required');
 const baseUrl = rawUrl.replace(/^libsql:\/\//, 'https://').replace(/^turso:\/\//, 'https://').replace(/\/$/, '');
-const files = ['migrations/001_crawler_staging.sql', 'migrations/002_crawler_results.sql', 'migrations/003_distribution.sql', 'migrations/004_validation.sql', 'migrations/005_classification.sql'];
+const files = ['migrations/001_crawler_staging.sql', 'migrations/002_crawler_results.sql', 'migrations/003_distribution.sql', 'migrations/004_validation.sql', 'migrations/005_classification.sql', 'migrations/006_crawl_site_queue.sql'];
 const statements = [];
 for (const file of files) {
   const sql = await fs.readFile(file, 'utf8');

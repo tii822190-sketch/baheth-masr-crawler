@@ -1,0 +1,85 @@
+name: Crawl One Queued Site
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+    inputs:
+      queue_action:
+        description: Queue action
+        required: true
+        default: run
+        type: choice
+        options: [run, add, list]
+      urls:
+        description: Comma-separated URLs to add when queue_action is add
+        required: false
+        default: ''
+concurrency:
+  group: baheth-crawler-queue
+  cancel-in-progress: false
+permissions:
+  contents: read
+jobs:
+  queue:
+    runs-on: ubuntu-latest
+    env:
+      TURSO_CRAWLER_DATABASE_URL: libsql://alzahf-karamkkr.aws-eu-west-1.turso.io
+      TURSO_CRAWLER_AUTH_TOKEN: ${{ secrets.TURSO_CRAWLER_AUTH_TOKEN }}
+      TURSO_PRODUCTION_DATABASE_URL: ${{ secrets.TURSO_PRODUCTION_DATABASE_URL }}
+      TURSO_PRODUCTION_AUTH_TOKEN: ${{ secrets.TURSO_PRODUCTION_AUTH_TOKEN }}
+      CRAWLER_INPUT_DB_PATH: db/links.sqlite
+      CRAWLER_RESULTS_DB_PATH: db/results.sqlite
+      CRAWLER_LIMIT: '1'
+      CRAWLER_DDG_QUERIES: ''
+      CRAWLER_DRAIN_DISCOVERIES: '1'
+      CRAWLER_MANUAL_ONLY: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - name: Apply crawler schema
+        run: node tools/apply-turso-schema.mjs
+      - name: Add URLs to queue
+        if: github.event_name == 'workflow_dispatch' && inputs.queue_action == 'add'
+        env:
+          QUEUE_URLS: ${{ inputs.urls }}
+        run: node tools/crawl-queue.mjs add "$QUEUE_URLS"
+      - name: List queue
+        if: github.event_name == 'workflow_dispatch' && inputs.queue_action == 'list'
+        run: node tools/crawl-queue.mjs list
+      - name: Claim one queued site
+        id: claim
+        if: github.event_name == 'schedule' || inputs.queue_action == 'run'
+        run: node tools/crawl-queue.mjs claim
+      - name: Initialize crawler databases
+        if: steps.claim.outputs.claimed == 'true'
+        run: node crawler/src/cli.mjs init
+      - name: Set claimed URL
+        if: steps.claim.outputs.claimed == 'true'
+        env:
+          QUEUE_URL: ${{ steps.claim.outputs.queue_url }}
+        run: echo "CRAWLER_MANUAL_URL=$QUEUE_URL" >> "$GITHUB_ENV"
+      - name: Crawl and checkpoint one site
+        if: steps.claim.outputs.claimed == 'true'
+        run: |
+          set -e
+          node crawler/src/cli.mjs manual
+          node tools/validate-staging.mjs
+          node tools/sync-turso-staging.mjs
+          node tools/sync-approved-production.mjs
+      - name: Mark site done
+        if: success() && steps.claim.outputs.claimed == 'true'
+        env:
+          QUEUE_ID: ${{ steps.claim.outputs.queue_id }}
+        run: node tools/crawl-queue.mjs done "$QUEUE_ID"
+      - name: Mark site failed for retry
+        if: failure() && steps.claim.outputs.claimed == 'true'
+        env:
+          QUEUE_ID: ${{ steps.claim.outputs.queue_id }}
+        run: node tools/crawl-queue.mjs fail "$QUEUE_ID" "GitHub Actions crawl failed; scheduled retry will try again"
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.claim.outputs.claimed == 'true'
+        with:
+          name: queued-crawler-${{ github.run_id }}
+          path: db/*.sqlite
