@@ -16,7 +16,10 @@ async function pipeline(url, token, requests, label = 'database') {
   }
   return body.results || [];
 }
-const source = await pipeline(stagingUrl, stagingToken, [{ type: 'execute', stmt: { sql: `SELECT r.id,r.requested_url,r.canonical_url,r.title,r.description,r.extracted_text,r.search_text,r.icon_url,r.content_hash,r.http_status,v.validation_status,r.category_candidate,r.subcategory_candidates_json,r.classification_confidence FROM crawl_results r JOIN crawl_review_items v ON v.result_id=r.id WHERE r.distribution_status='approved' AND v.validation_status='approved' AND length(trim(r.title))>0 AND length(trim(r.description))>0 AND length(trim(r.extracted_text))>=300 ORDER BY r.id` } }], 'staging');
+const syncRunId = Number(process.env.CRAWLER_SYNC_RUN_ID || 0);
+const runFilter = syncRunId > 0 ? ' AND r.source_run_id=?' : '';
+const runArgs = syncRunId > 0 ? [arg('integer', syncRunId)] : [];
+const source = await pipeline(stagingUrl, stagingToken, [{ type: 'execute', stmt: { sql: `SELECT r.id,r.requested_url,r.canonical_url,r.title,r.description,r.extracted_text,r.search_text,r.icon_url,r.content_hash,r.http_status,v.validation_status,r.category_candidate,r.subcategory_candidates_json,r.classification_confidence FROM crawl_results r JOIN crawl_review_items v ON v.result_id=r.id WHERE r.distribution_status='approved' AND v.validation_status='approved' AND length(trim(r.title))>0 AND length(trim(r.description))>0 AND length(trim(r.extracted_text))>=300${runFilter} ORDER BY r.id`, args: runArgs } }], 'staging');
 const result = source[0].response.result;
 const rows = result.rows.map((row) => Object.fromEntries(result.cols.map((column, index) => [column.name, scalar(row[index])] )));
 if (!rows.length) throw Error('No approved staging rows available');

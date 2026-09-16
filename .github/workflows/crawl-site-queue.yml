@@ -100,6 +100,7 @@ jobs:
             echo "Starting page batch $batch (size=$CRAWLER_BATCH_SIZE, total limit=$CRAWLER_MAX_PAGES)"
             crawl_output=$(node crawler/src/cli.mjs manual)
             echo "$crawl_output"
+            export CRAWLER_SYNC_RUN_ID=$(node -e "const x=JSON.parse(process.argv[1]); console.log(Number(x.runId)||0)" "$crawl_output")
             processed=$(node -e "const x=JSON.parse(process.argv[1]); console.log(Number(x.total)||0)" "$crawl_output")
             processed_pages=$((processed_pages + processed))
             node tools/validate-staging.mjs
