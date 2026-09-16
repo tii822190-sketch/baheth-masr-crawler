@@ -48,7 +48,7 @@ for (const [name, rawUrl, token] of configs) {
   manifests.push({ name, rawUrl, token, tables, ftsSchema });
 }
 fs.writeFileSync(path.join(root, 'reset-manifest.json'), JSON.stringify({ created_at: new Date().toISOString(), databases: manifests.map((x) => ({ name: x.name, tables: x.tables })) }, null, 2) + '\n');
-for (const { name, rawUrl, token, tables } of manifests) {
+for (const { name, rawUrl, token, tables, ftsSchema } of manifests) {
   const productionOrder = ['site_search_fts', 'site_pages', 'sites'];
   const stagingOrder = ['crawl_quarantine', 'crawl_review_items', 'crawl_results', 'crawl_observations', 'crawl_discoveries', 'crawl_targets', 'site_pages', 'sites', 'crawl_runs'];
   const preferred = name === 'production' ? productionOrder : stagingOrder;
