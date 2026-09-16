@@ -28,7 +28,14 @@ function addDiscovery(runId, url, source, from='', title='', description='') {
 
 export async function discover(runId, { queries=[], manualUrl='' }={}) {
   let count=0;
-  if (manualUrl) count += addDiscovery(runId, manualUrl, 'manual') ? 1 : 0;
+  if (manualUrl) {
+    const canonicalUrl = canonicalize(manualUrl);
+    if (canonicalUrl) {
+      const existing = db.prepare('SELECT id FROM sites WHERE url=?').get(canonicalUrl);
+      const siteId = existing?.id ?? db.prepare("INSERT INTO sites (url,name,status,priority) VALUES (?,?, 'active',100)").run(canonicalUrl, new URL(canonicalUrl).hostname).lastInsertRowid;
+      try { db.prepare(`INSERT INTO crawl_discoveries (run_id,source_site_id,discovered_url,canonical_url,discovery_source) VALUES (?,?,?,?,?)`).run(runId,siteId,manualUrl,canonicalUrl,'manual'); count++; } catch {}
+    }
+  }
   for (const query of queries.slice(0,3)) { for (const hit of await ddg(query)) count += addDiscovery(runId,hit.url,'duckduckgo',`https://duckduckgo.com/?q=${encodeURIComponent(query)}`,hit.title) ? 1 : 0; await sleep(1200); }
   return count;
 }

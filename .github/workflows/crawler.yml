@@ -14,7 +14,7 @@ on:
         default: '10'
       manual_url:
         description: One URL to add to discoveries
-        required: false
+        required: true
         default: ''
       ddg_queries:
         description: Up to 3 DuckDuckGo queries separated by |
@@ -34,9 +34,6 @@ on:
         required: true
         default: 'false'
         type: boolean
-  schedule:
-    - cron: '30 0 * * *'
-    - cron: '0 1 * * 5'
 permissions:
   contents: read
 jobs:
@@ -47,6 +44,7 @@ jobs:
       CRAWLER_MANUAL_URL: ${{ github.event.inputs.manual_url || '' }}
       CRAWLER_DDG_QUERIES: ${{ github.event.inputs.ddg_queries || '' }}
       CRAWLER_DRAIN_DISCOVERIES: ${{ github.event.inputs.drain_discoveries == 'true' && '1' || '0' }}
+      CRAWLER_MANUAL_ONLY: '1'
       CRAWLER_INPUT_DB_PATH: db/links.sqlite
       CRAWLER_RESULTS_DB_PATH: db/results.sqlite
       TURSO_CRAWLER_DATABASE_URL: libsql://alzahf-karamkkr.aws-eu-west-1.turso.io
