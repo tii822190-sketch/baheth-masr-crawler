@@ -20,6 +20,11 @@ on:
         description: Up to 3 DuckDuckGo queries separated by |
         required: false
         default: ''
+      sync_production:
+        description: Sync approved rows to production (manual confirmation required)
+        required: true
+        default: 'false'
+        type: boolean
   schedule:
     - cron: '30 0 * * *'
     - cron: '0 1 * * 5'
@@ -57,7 +62,7 @@ jobs:
         if: success()
         run: node tools/sync-turso-staging.mjs
       - name: Sync approved results to production and update FTS
-        if: success()
+        if: success() && github.event_name == 'workflow_dispatch' && github.event.inputs.sync_production == 'true'
         run: node tools/sync-approved-production.mjs
       - uses: actions/upload-artifact@v4
         if: always()

@@ -1,0 +1,13 @@
+ALTER TABLE crawl_results ADD COLUMN category_candidate TEXT NOT NULL DEFAULT 'other';
+ALTER TABLE crawl_results ADD COLUMN subcategory_candidates_json TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE crawl_results ADD COLUMN classification_score REAL NOT NULL DEFAULT 0;
+ALTER TABLE crawl_results ADD COLUMN classification_confidence REAL NOT NULL DEFAULT 0;
+ALTER TABLE crawl_results ADD COLUMN classification_status TEXT NOT NULL DEFAULT 'candidate';
+ALTER TABLE crawl_results ADD COLUMN classification_reasons_json TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE crawl_review_items ADD COLUMN category_candidate TEXT NOT NULL DEFAULT 'other';
+ALTER TABLE crawl_review_items ADD COLUMN subcategory_candidates_json TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE crawl_review_items ADD COLUMN classification_score REAL NOT NULL DEFAULT 0;
+ALTER TABLE crawl_review_items ADD COLUMN classification_confidence REAL NOT NULL DEFAULT 0;
+ALTER TABLE crawl_review_items ADD COLUMN classification_status TEXT NOT NULL DEFAULT 'candidate';
+ALTER TABLE crawl_review_items ADD COLUMN classification_reasons_json TEXT NOT NULL DEFAULT '[]';
+CREATE INDEX IF NOT EXISTS idx_review_category ON crawl_review_items(category_candidate, classification_status);
