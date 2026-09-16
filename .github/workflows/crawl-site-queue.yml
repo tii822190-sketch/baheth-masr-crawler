@@ -9,7 +9,7 @@ on:
         required: true
         default: run
         type: choice
-        options: [run, add, list]
+        options: [run, add, list, reset]
       urls:
         description: Comma-separated URLs to add when queue_action is add
         required: false
@@ -22,6 +22,10 @@ on:
         description: Maximum pages for this site in this run
         required: false
         default: '500'
+      queue_id:
+        description: Queue ID for reset
+        required: false
+        default: ''
 concurrency:
   group: baheth-crawler-queue
   cancel-in-progress: false
@@ -60,6 +64,11 @@ jobs:
       - name: List queue
         if: github.event_name == 'workflow_dispatch' && inputs.queue_action == 'list'
         run: node tools/crawl-queue.mjs list
+      - name: Reset queue item
+        if: github.event_name == 'workflow_dispatch' && inputs.queue_action == 'reset'
+        env:
+          QUEUE_ID: ${{ inputs.queue_id }}
+        run: node tools/crawl-queue.mjs reset "$QUEUE_ID"
       - name: Claim one queued site
         id: claim
         if: github.event_name == 'schedule' || inputs.queue_action == 'run'

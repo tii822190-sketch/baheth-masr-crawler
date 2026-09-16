@@ -32,7 +32,7 @@ function rows(result) {
   return (r?.rows || []).map(row => Object.fromEntries(row.map((v, i) => [cols[i], v?.value ?? v])));
 }
 const [command, ...values] = process.argv.slice(2);
-if (!['add', 'list', 'claim', 'done', 'fail'].includes(command)) throw new Error('Usage: add <url...> | list | claim | done <id> | fail <id> <message>');
+if (!['add', 'list', 'claim', 'done', 'fail', 'reset'].includes(command)) throw new Error('Usage: add <url...> | list | claim | done <id> | fail <id> <message> | reset <id>');
 if (command === 'add') {
   const urls = values.flatMap(value => value.split(',')).map(canonicalize).filter(Boolean);
   if (!urls.length) throw new Error('No valid URLs supplied');
@@ -65,4 +65,8 @@ if (command === 'add') {
   const message = values.slice(1).join(' ').slice(0, 1000);
   await pipeline([{ sql: `UPDATE crawl_site_queue SET status='failed',updated_at=CURRENT_TIMESTAMP,last_error=? WHERE id=?`, args: [arg('text', message), arg('integer', id)] }]);
   console.log(JSON.stringify({ failed: true, id, message }));
+} else if (command === 'reset') {
+  const id = Number(values[0]);
+  await pipeline([{ sql: `UPDATE crawl_site_queue SET status='pending',completed_at=NULL,updated_at=CURRENT_TIMESTAMP,last_error='' WHERE id=?`, args: [arg('integer', id)] }]);
+  console.log(JSON.stringify({ reset: true, id }));
 }
