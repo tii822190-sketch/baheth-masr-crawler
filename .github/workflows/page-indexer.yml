@@ -1,0 +1,76 @@
+name: Page Indexer
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+    inputs:
+      batch_size:
+        description: Pages per batch
+        required: false
+        default: '50'
+      max_pages:
+        description: Maximum pages per run
+        required: false
+        default: '500'
+concurrency:
+  group: baheth-page-indexer
+  cancel-in-progress: false
+permissions:
+  contents: read
+jobs:
+  index:
+    runs-on: ubuntu-latest
+    env:
+      TURSO_CRAWLER_DATABASE_URL: libsql://alzahf-karamkkr.aws-eu-west-1.turso.io
+      TURSO_CRAWLER_AUTH_TOKEN: ${{ secrets.TURSO_CRAWLER_AUTH_TOKEN }}
+      TURSO_PRODUCTION_DATABASE_URL: ${{ secrets.TURSO_PRODUCTION_DATABASE_URL }}
+      TURSO_PRODUCTION_AUTH_TOKEN: ${{ secrets.TURSO_PRODUCTION_AUTH_TOKEN }}
+      CRAWLER_INPUT_DB_PATH: db/links.sqlite
+      CRAWLER_RESULTS_DB_PATH: db/results.sqlite
+      CRAWLER_SOURCE: unindexed_pages
+      CRAWLER_DISCOVERY_MODE: '0'
+      CRAWLER_MANUAL_ONLY: '1'
+      CRAWLER_FETCH_MODE: hybrid
+      CRAWLER_CONCURRENCY: '10'
+      CRAWLER_BROWSER_CONCURRENCY: '7'
+      CRAWLER_DRAIN_DISCOVERIES: '0'
+      CRAWLER_ONE_BATCH: '1'
+      CRAWLER_BATCH_SIZE: ${{ inputs.batch_size || '50' }}
+      CRAWLER_MAX_PAGES: ${{ inputs.max_pages || '500' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: node tools/apply-turso-schema.mjs
+      - run: node crawler/src/cli.mjs init
+      - run: node tools/restore-turso-staging.mjs
+      - name: Index pages from site_pages only
+        run: |
+          set -e
+          processed_pages=0
+          while [ "$processed_pages" -lt "$CRAWLER_MAX_PAGES" ]; do
+            remaining=$((CRAWLER_MAX_PAGES - processed_pages))
+            current_batch_size=$CRAWLER_BATCH_SIZE
+            if [ "$current_batch_size" -gt "$remaining" ]; then current_batch_size=$remaining; fi
+            export CRAWLER_BATCH_SIZE="$current_batch_size"
+            output=$(node crawler/src/cli.mjs manual)
+            echo "$output"
+            export CRAWLER_SYNC_RUN_ID=$(node -e "const x=JSON.parse(process.argv[1]); console.log(Number(x.runId)||0)" "$output")
+            processed=$(node -e "const x=JSON.parse(process.argv[1]); console.log(Number(x.total)||0)" "$output")
+            processed_pages=$((processed_pages + processed))
+            node tools/validate-staging.mjs
+            node tools/sync-turso-staging.mjs
+            if ! sync=$(node tools/sync-approved-production.mjs 2>&1); then
+              echo "$sync"
+              echo "$sync" | grep -q 'No approved staging rows available'
+            else
+              echo "$sync"
+            fi
+            [ "$processed" -eq 0 ] && break
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: page-indexer-${{ github.run_id }}
+          path: db/*.sqlite

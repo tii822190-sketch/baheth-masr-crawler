@@ -1,0 +1,26 @@
+name: Discovery Spider
+on:
+  schedule:
+    - cron: '15 1 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    env:
+      TURSO_CRAWLER_DATABASE_URL: libsql://alzahf-karamkkr.aws-eu-west-1.turso.io
+      TURSO_CRAWLER_AUTH_TOKEN: ${{ secrets.TURSO_CRAWLER_AUTH_TOKEN }}
+      CRAWLER_INPUT_DB_PATH: db/links.sqlite
+      DISCOVERY_MAX_SITES: '25'
+      DISCOVERY_MAX_PAGES_PER_SITE: '500'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: node tools/apply-turso-schema.mjs
+      - run: node crawler/src/cli.mjs init
+      - run: node tools/restore-turso-staging.mjs
+      - name: Discover sites and pages only
+        run: node tools/discovery-spider.mjs

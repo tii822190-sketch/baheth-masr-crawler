@@ -1,7 +1,5 @@
 name: Crawl One Queued Site
 on:
-  schedule:
-    - cron: '*/30 * * * *'
   workflow_dispatch:
     inputs:
       queue_action:

@@ -51,7 +51,7 @@ jobs:
       CRAWLER_LIMIT: ${{ github.event.inputs.limit || '10' }}
       CRAWLER_MANUAL_URL: ${{ github.event.inputs.manual_url || '' }}
       CRAWLER_DDG_QUERIES: ${{ github.event.inputs.ddg_queries || '' }}
-      CRAWLER_DRAIN_DISCOVERIES: ${{ github.event.inputs.drain_discoveries == 'true' && '1' || '0' }}
+      CRAWLER_DRAIN_DISCOVERIES: '0'
       CRAWLER_MANUAL_ONLY: '1'
       CRAWLER_CONCURRENCY: '10'
       CRAWLER_BROWSER_CONCURRENCY: '7'
