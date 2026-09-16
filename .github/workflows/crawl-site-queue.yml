@@ -46,6 +46,7 @@ jobs:
       CRAWLER_DRAIN_DISCOVERIES: '1'
       CRAWLER_MANUAL_ONLY: '1'
       CRAWLER_CONCURRENCY: '10'
+      CRAWLER_BROWSER_CONCURRENCY: '7'
       CRAWLER_FETCH_MODE: 'hybrid'
       CRAWLER_BATCH_SIZE: ${{ inputs.batch_size || '50' }}
       CRAWLER_MAX_PAGES: ${{ inputs.max_pages || '500' }}

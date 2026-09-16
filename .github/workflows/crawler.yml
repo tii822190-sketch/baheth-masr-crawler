@@ -54,6 +54,7 @@ jobs:
       CRAWLER_DRAIN_DISCOVERIES: ${{ github.event.inputs.drain_discoveries == 'true' && '1' || '0' }}
       CRAWLER_MANUAL_ONLY: '1'
       CRAWLER_CONCURRENCY: '10'
+      CRAWLER_BROWSER_CONCURRENCY: '7'
       CRAWLER_FETCH_MODE: 'hybrid'
       CRAWLER_SOURCE: 'unindexed_pages'
       CRAWLER_ONE_BATCH: '1'
