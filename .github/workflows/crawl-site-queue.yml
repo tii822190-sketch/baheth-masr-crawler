@@ -63,6 +63,9 @@ jobs:
       - name: Initialize crawler databases
         if: steps.claim.outputs.claimed == 'true'
         run: node crawler/src/cli.mjs init
+      - name: Restore previous crawler checkpoint
+        if: steps.claim.outputs.claimed == 'true'
+        run: node tools/restore-turso-staging.mjs
       - name: Set claimed URL
         if: steps.claim.outputs.claimed == 'true'
         env:
