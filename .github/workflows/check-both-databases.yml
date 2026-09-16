@@ -1,0 +1,18 @@
+name: Check Both Baheth Masr Databases
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    env:
+      TURSO_PRODUCTION_DATABASE_URL: ${{ secrets.TURSO_PRODUCTION_DATABASE_URL }}
+      TURSO_PRODUCTION_AUTH_TOKEN: ${{ secrets.TURSO_PRODUCTION_AUTH_TOKEN }}
+      TURSO_CRAWLER_DATABASE_URL: libsql://alzahf-karamkkr.aws-eu-west-1.turso.io
+      TURSO_CRAWLER_AUTH_TOKEN: ${{ secrets.TURSO_CRAWLER_AUTH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: node tools/check-both-databases.mjs
