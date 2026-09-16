@@ -34,7 +34,7 @@ jobs:
       CRAWLER_DRAIN_DISCOVERIES: '1'
       CRAWLER_MANUAL_ONLY: '1'
       CRAWLER_CONCURRENCY: '5'
-      CRAWLER_FETCH_MODE: 'browser'
+      CRAWLER_FETCH_MODE: 'hybrid'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
