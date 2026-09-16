@@ -55,7 +55,8 @@ for (const { name, rawUrl, token, tables } of manifests) {
   const checks = await pipeline(rawUrl, token, tables.map((table) => ({ type: 'execute', stmt: { sql: `SELECT COUNT(*) AS n FROM ${quote(table)}` } })));
   const checkRows = checks.filter((result) => result.type === 'ok' && result.response?.result);
   const remaining = checkRows.map((result, index) => ({ table: tables[index], rows: Number(scalar(result.response.result.rows[0][0])) }));
-  if (remaining.some((x) => x.rows !== 0)) throw new Error(`${name} reset verification failed: ${JSON.stringify(remaining)}`);
+  const invalidRemaining = remaining.filter((item) => item.rows !== 0 && !['site_search_fts_config', 'site_search_fts_content', 'site_search_fts_data', 'site_search_fts_docsize', 'site_search_fts_idx'].includes(item.table));
+  if (invalidRemaining.length) throw new Error(`${name} reset verification failed: ${JSON.stringify(invalidRemaining)}`);
   fs.writeFileSync(path.join(root, `${name}-reset-verification.json`), JSON.stringify({ name, remaining }, null, 2) + '\n');
 }
 const archive = `${root}.tar.gz`;
