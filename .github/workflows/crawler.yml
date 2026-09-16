@@ -38,6 +38,10 @@ on:
         description: Pages per checkpoint batch
         required: false
         default: '50'
+      max_pages:
+        description: Maximum pages for this run
+        required: false
+        default: '500'
 permissions:
   contents: read
 jobs:
@@ -52,6 +56,7 @@ jobs:
       CRAWLER_CONCURRENCY: '10'
       CRAWLER_FETCH_MODE: 'hybrid'
       CRAWLER_BATCH_SIZE: ${{ github.event.inputs.batch_size || '50' }}
+      CRAWLER_MAX_PAGES: ${{ github.event.inputs.max_pages || '500' }}
       CRAWLER_INPUT_DB_PATH: db/links.sqlite
       CRAWLER_RESULTS_DB_PATH: db/results.sqlite
       TURSO_CRAWLER_DATABASE_URL: libsql://alzahf-karamkkr.aws-eu-west-1.turso.io
@@ -77,9 +82,18 @@ jobs:
           CRAWLER_PASSES: ${{ github.event.inputs.passes || '1' }}
         run: |
           set -e
+          processed_pages=0
           for pass in $(seq 1 "$CRAWLER_PASSES"); do
+            remaining=$((CRAWLER_MAX_PAGES - processed_pages))
+            if [ "$remaining" -le 0 ]; then break; fi
+            current_batch_size=$CRAWLER_BATCH_SIZE
+            if [ "$current_batch_size" -gt "$remaining" ]; then current_batch_size=$remaining; fi
+            export CRAWLER_BATCH_SIZE="$current_batch_size"
             echo "Starting crawl pass $pass/$CRAWLER_PASSES"
-            node crawler/src/cli.mjs "${{ steps.mode.outputs.run_type }}"
+            crawl_output=$(node crawler/src/cli.mjs "${{ steps.mode.outputs.run_type }}")
+            echo "$crawl_output"
+            processed=$(node -e "const x=JSON.parse(process.argv[1]); console.log(Number(x.total)||0)" "$crawl_output")
+            processed_pages=$((processed_pages + processed))
             echo "Checkpointing crawl pass $pass/$CRAWLER_PASSES"
             node tools/validate-staging.mjs
             node tools/sync-turso-staging.mjs

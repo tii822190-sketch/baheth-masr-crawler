@@ -18,6 +18,10 @@ on:
         description: Pages per checkpoint batch
         required: false
         default: '50'
+      max_pages:
+        description: Maximum pages for this site in this run
+        required: false
+        default: '500'
 concurrency:
   group: baheth-crawler-queue
   cancel-in-progress: false
@@ -40,7 +44,7 @@ jobs:
       CRAWLER_CONCURRENCY: '10'
       CRAWLER_FETCH_MODE: 'hybrid'
       CRAWLER_BATCH_SIZE: ${{ inputs.batch_size || '50' }}
-      CRAWLER_MAX_BATCHES: '200'
+      CRAWLER_MAX_PAGES: ${{ inputs.max_pages || '500' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -76,9 +80,19 @@ jobs:
         run: |
           set -e
           complete=false
-          for batch in $(seq 1 "$CRAWLER_MAX_BATCHES"); do
-            echo "Starting page batch $batch/$CRAWLER_MAX_BATCHES (size=$CRAWLER_BATCH_SIZE)"
-            node crawler/src/cli.mjs manual
+          processed_pages=0
+          batch=0
+          while [ "$processed_pages" -lt "$CRAWLER_MAX_PAGES" ]; do
+            batch=$((batch + 1))
+            remaining=$((CRAWLER_MAX_PAGES - processed_pages))
+            current_batch_size=$CRAWLER_BATCH_SIZE
+            if [ "$current_batch_size" -gt "$remaining" ]; then current_batch_size=$remaining; fi
+            export CRAWLER_BATCH_SIZE="$current_batch_size"
+            echo "Starting page batch $batch (size=$CRAWLER_BATCH_SIZE, total limit=$CRAWLER_MAX_PAGES)"
+            crawl_output=$(node crawler/src/cli.mjs manual)
+            echo "$crawl_output"
+            processed=$(node -e "const x=JSON.parse(process.argv[1]); console.log(Number(x.total)||0)" "$crawl_output")
+            processed_pages=$((processed_pages + processed))
             node tools/validate-staging.mjs
             node tools/sync-turso-staging.mjs
             if ! sync_output=$(node tools/sync-approved-production.mjs 2>&1); then
@@ -91,9 +105,10 @@ jobs:
             echo "$status"
             pending=$(node -e "const x=JSON.parse(process.argv[1]); console.log(Number(x.pending)+Number(x.queued)+Number(x.pending_targets))" "$status")
             if [ "$pending" -eq 0 ]; then complete=true; break; fi
+            if [ "$processed" -eq 0 ]; then break; fi
           done
           if [ "$complete" != true ]; then
-            echo 'Maximum batches reached; site remains processing for the next scheduled run.'
+            echo "Maximum pages reached ($processed_pages); site remains processing for the next scheduled run."
             exit 0
           fi
           echo 'CRAWLER_SITE_COMPLETE=true' >> "$GITHUB_ENV"
