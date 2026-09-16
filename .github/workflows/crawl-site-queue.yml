@@ -83,7 +83,9 @@ jobs:
         if: steps.claim.outputs.claimed == 'true'
         env:
           QUEUE_URL: ${{ steps.claim.outputs.queue_url }}
-        run: echo "CRAWLER_MANUAL_URL=$QUEUE_URL" >> "$GITHUB_ENV"
+        run: |
+          echo "CRAWLER_MANUAL_URL=$QUEUE_URL" >> "$GITHUB_ENV"
+          echo "CRAWLER_FORCE_MANUAL_URL=1" >> "$GITHUB_ENV"
       - name: Crawl site in checkpoint batches
         if: steps.claim.outputs.claimed == 'true'
         run: |

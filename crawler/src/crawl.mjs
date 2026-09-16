@@ -18,6 +18,15 @@ function createRun(type) { return db.prepare(`INSERT INTO crawl_runs (run_type,s
 function hasResultsTable() { return Boolean(resultsDb.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='crawl_results'").get()); }
 function isApproved(canonical) { return hasResultsTable() && Boolean(resultsDb.prepare("SELECT 1 FROM crawl_results WHERE canonical_url=? AND crawl_status='success' AND distribution_status='approved' LIMIT 1").get(canonical)); }
 function createTargets(runId, runType) {
+  const manualUrl = process.env.CRAWLER_MANUAL_URL || '';
+  if (process.env.CRAWLER_FORCE_MANUAL_URL === '1' && manualUrl) {
+    const canonical = canonicalize(manualUrl);
+    const site = db.prepare("SELECT id AS site_id FROM sites WHERE canonical_url=? OR url=? LIMIT 1").get(canonical, manualUrl);
+    if (canonical && !db.prepare("SELECT 1 FROM crawl_targets WHERE run_id=? AND canonical_url=? LIMIT 1").get(runId, canonical)) {
+      db.prepare(`INSERT INTO crawl_targets (run_id,target_type,site_id,url,canonical_url,parent_url,priority,reason) VALUES (?, 'site', ?, ?, ?, '', 100, 'forced_manual_url')`).run(runId, site?.site_id || null, manualUrl, canonical);
+      db.prepare('UPDATE crawl_runs SET target_count=target_count+1 WHERE id=?').run(runId);
+    }
+  }
   if (sourceMode === 'unindexed_pages') {
     const pendingTargets = db.prepare("SELECT id FROM crawl_targets WHERE status IN ('queued','processing') ORDER BY priority DESC,id LIMIT ?").all(maxPages);
     if (pendingTargets.length) { const ids = pendingTargets.map((target) => target.id); const placeholders = ids.map(() => '?').join(','); db.prepare(`UPDATE crawl_targets SET run_id=? WHERE id IN (${placeholders})`).run(runId, ...ids); db.prepare('UPDATE crawl_runs SET target_count=? WHERE id=?').run(pendingTargets.length, runId); return pendingTargets.length; }
