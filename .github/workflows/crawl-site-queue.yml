@@ -33,6 +33,8 @@ jobs:
       CRAWLER_DDG_QUERIES: ''
       CRAWLER_DRAIN_DISCOVERIES: '1'
       CRAWLER_MANUAL_ONLY: '1'
+      CRAWLER_CONCURRENCY: '5'
+      CRAWLER_FETCH_MODE: 'browser'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

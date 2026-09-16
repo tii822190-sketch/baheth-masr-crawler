@@ -45,6 +45,8 @@ jobs:
       CRAWLER_DDG_QUERIES: ${{ github.event.inputs.ddg_queries || '' }}
       CRAWLER_DRAIN_DISCOVERIES: ${{ github.event.inputs.drain_discoveries == 'true' && '1' || '0' }}
       CRAWLER_MANUAL_ONLY: '1'
+      CRAWLER_CONCURRENCY: '5'
+      CRAWLER_FETCH_MODE: 'browser'
       CRAWLER_INPUT_DB_PATH: db/links.sqlite
       CRAWLER_RESULTS_DB_PATH: db/results.sqlite
       TURSO_CRAWLER_DATABASE_URL: libsql://alzahf-karamkkr.aws-eu-west-1.turso.io

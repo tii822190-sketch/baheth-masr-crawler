@@ -3,7 +3,7 @@ import { db, resultsDb, canonicalize } from './db.mjs';
 import { extractHtml } from './extract.mjs';
 import { discover } from './discovery.mjs';
 
-const timeoutMs=Number(process.env.CRAWLER_TIMEOUT_MS||20000),limit=Number(process.env.CRAWLER_LIMIT||10),delayMs=Number(process.env.CRAWLER_DELAY_MS||300),retries=Number(process.env.CRAWLER_RETRIES||2),concurrency=Math.max(1,Math.min(4,Number(process.env.CRAWLER_CONCURRENCY||2))),fetchMode=process.env.CRAWLER_FETCH_MODE||'browser';
+const timeoutMs=Number(process.env.CRAWLER_TIMEOUT_MS||20000),limit=Number(process.env.CRAWLER_LIMIT||10),delayMs=Number(process.env.CRAWLER_DELAY_MS||300),retries=Number(process.env.CRAWLER_RETRIES||2),concurrency=Math.max(1,Math.min(7,Number(process.env.CRAWLER_CONCURRENCY||2))),fetchMode=process.env.CRAWLER_FETCH_MODE||'browser';
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 function createRun(t){return db.prepare(`INSERT INTO crawl_runs (run_type,status,started_at) VALUES (?, 'running', CURRENT_TIMESTAMP)`).run(t).lastInsertRowid;}
 function createTargets(id,t){if(process.env.CRAWLER_MANUAL_ONLY==='1')return;const sites=db.prepare(`SELECT id AS site_id,url,priority FROM sites WHERE status='active' ORDER BY priority DESC LIMIT ?`).all(limit);const ins=db.prepare(`INSERT INTO crawl_targets (run_id,target_type,site_id,url,canonical_url,parent_url,priority,reason) VALUES (?, 'site', ?, ?, ?, '', ?, ?)`);for(const s of sites)ins.run(id,s.site_id,s.url,canonicalize(s.url),s.priority,t);}
