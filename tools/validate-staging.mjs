@@ -43,13 +43,15 @@ export function validateRow(row, duplicateCanonicalCount = 1, duplicateHashCount
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   const db = new Database(process.env.CRAWLER_RESULTS_DB_PATH || 'db/results.sqlite');
+  const validationRunId = Number(process.env.CRAWLER_SYNC_RUN_ID || 0);
+  const runFilter = validationRunId > 0 ? ' WHERE r.source_run_id=?' : '';
   const rows = db.prepare(`
     SELECT v.*, r.crawl_status, r.http_status, r.content_type,
       r.quality_status AS result_quality_status, r.title AS result_title,
       r.extracted_text AS result_extracted_text, r.search_text AS result_search_text,
       r.canonical_url AS result_canonical_url, r.content_hash AS result_content_hash
-    FROM crawl_review_items v JOIN crawl_results r ON r.id = v.result_id ORDER BY v.id
-  `).all();
+    FROM crawl_review_items v JOIN crawl_results r ON r.id = v.result_id${runFilter} ORDER BY v.id
+  `).all(...(validationRunId > 0 ? [validationRunId] : []));
   for (const row of rows) {
     row.quality_status = row.result_quality_status;
     row.title = row.result_title;
