@@ -25,6 +25,10 @@ on:
         required: true
         default: 'false'
         type: boolean
+      passes:
+        description: Number of crawl passes to fetch discovered pages
+        required: true
+        default: '1'
   schedule:
     - cron: '30 0 * * *'
     - cron: '0 1 * * 5'
@@ -55,7 +59,15 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then echo "run_type=${{ github.event.inputs.run_type }}" >> "$GITHUB_OUTPUT"; elif [ "$(date -u +%u)" = "5" ]; then echo 'run_type=weekly_refresh' >> "$GITHUB_OUTPUT"; else echo 'run_type=daily_check' >> "$GITHUB_OUTPUT"; fi
       - run: node crawler/src/cli.mjs init
-      - run: node crawler/src/cli.mjs "${{ steps.mode.outputs.run_type }}"
+      - name: Crawl configured passes
+        env:
+          CRAWLER_PASSES: ${{ github.event.inputs.passes || '1' }}
+        run: |
+          set -e
+          for pass in $(seq 1 "$CRAWLER_PASSES"); do
+            echo "Starting crawl pass $pass/$CRAWLER_PASSES"
+            node crawler/src/cli.mjs "${{ steps.mode.outputs.run_type }}"
+          done
       - name: Validate crawler review data
         run: node tools/validate-staging.mjs
       - name: Sync crawler staging results to Turso
