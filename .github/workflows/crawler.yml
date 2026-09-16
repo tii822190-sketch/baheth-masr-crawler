@@ -71,15 +71,20 @@ jobs:
           for pass in $(seq 1 "$CRAWLER_PASSES"); do
             echo "Starting crawl pass $pass/$CRAWLER_PASSES"
             node crawler/src/cli.mjs "${{ steps.mode.outputs.run_type }}"
+            echo "Checkpointing crawl pass $pass/$CRAWLER_PASSES"
+            node tools/validate-staging.mjs
+            node tools/sync-turso-staging.mjs
+            if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.event.inputs.sync_production }}" = "true" ]; then
+              node tools/sync-approved-production.mjs
+            fi
           done
-      - name: Validate crawler review data
-        run: node tools/validate-staging.mjs
-      - name: Sync crawler staging results to Turso
-        if: success()
-        run: node tools/sync-turso-staging.mjs
-      - name: Sync approved results to production and update FTS
-        if: success() && github.event_name == 'workflow_dispatch' && github.event.inputs.sync_production == 'true'
-        run: node tools/sync-approved-production.mjs
+      - name: Final checkpoint verification
+        run: |
+          node tools/validate-staging.mjs
+          node tools/sync-turso-staging.mjs
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.event.inputs.sync_production }}" = "true" ]; then
+            node tools/sync-approved-production.mjs
+          fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:
