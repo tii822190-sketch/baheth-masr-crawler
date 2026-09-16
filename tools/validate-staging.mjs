@@ -13,7 +13,7 @@ export function validateRow(row, duplicateCanonicalCount = 1, duplicateHashCount
   if (!String(row.content_type || '').toLowerCase().includes('html')) reasons.push('not_html');
   if (row.quality_status !== 'good') reasons.push(`quality_${row.quality_status || 'unknown'}`);
   if (!row.title?.trim()) reasons.push('missing_title');
-  if ((row.extracted_text || '').trim().length < 300) reasons.push('text_too_short');
+  if ((row.extracted_text || '').trim().length < 200) reasons.push('text_too_short');
   if ((row.search_text || '').trim().length < 100) reasons.push('search_text_too_short');
   if (!row.canonical_url || !/^https?:\/\//i.test(row.canonical_url)) reasons.push('invalid_canonical_url');
   if (duplicateCanonicalCount > 1) reasons.push('duplicate_canonical_url');
