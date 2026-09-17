@@ -25,7 +25,7 @@ on:
         required: false
         default: ''
 concurrency:
-  group: baheth-crawler-queue
+  group: baheth-crawler-staging-write
   cancel-in-progress: false
 permissions:
   contents: read
@@ -55,6 +55,8 @@ jobs:
       - run: npm ci
       - name: Apply crawler schema
         run: node tools/apply-turso-schema.mjs
+      - name: Acquire staging write lock
+        run: node tools/turso-job-lock.mjs acquire
       - name: Add URLs to queue
         if: github.event_name == 'workflow_dispatch' && inputs.queue_action == 'add'
         env:
@@ -174,3 +176,6 @@ jobs:
         with:
           name: queued-crawler-${{ github.run_id }}
           path: db/*.sqlite
+      - name: Release staging write lock
+        if: always()
+        run: node tools/turso-job-lock.mjs release || true
