@@ -34,6 +34,7 @@ jobs:
       CRAWLER_INPUT_DB_PATH: db/links.sqlite
       CRAWLER_RESULTS_DB_PATH: db/results.sqlite
       CRAWLER_SOURCE: unindexed_pages
+      CRAWLER_SEED_STAGING: '0'
       CRAWLER_DISCOVERY_MODE: '0'
       CRAWLER_MANUAL_ONLY: '1'
       CRAWLER_FETCH_MODE: hybrid
