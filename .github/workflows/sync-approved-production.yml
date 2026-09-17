@@ -7,6 +7,11 @@ on:
         required: true
         default: ''
         type: string
+      replace_root:
+        description: Replace all existing production pages for the approved root
+        required: false
+        default: 'false'
+        type: boolean
 concurrency:
   group: baheth-crawler-staging-write
   cancel-in-progress: false
@@ -24,6 +29,7 @@ jobs:
       CRAWLER_INPUT_DB_PATH: db/links.sqlite
       CRAWLER_RESULTS_DB_PATH: db/results.sqlite
       CONFIRM_SYNC: ${{ inputs.confirm }}
+      SYNC_REPLACE_ROOT: ${{ inputs.replace_root || 'false' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -38,7 +44,9 @@ jobs:
         run: node tools/turso-job-lock.mjs acquire
       - name: Sync approved rows only
         if: env.CONFIRM_SYNC == 'SYNC_APPROVED'
-        run: node tools/sync-approved-production.mjs
+        run: |
+          if [ "$SYNC_REPLACE_ROOT" = "true" ]; then export SYNC_REPLACE_ROOT=1; else export SYNC_REPLACE_ROOT=0; fi
+          node tools/sync-approved-production.mjs
       - name: Reject missing confirmation
         if: env.CONFIRM_SYNC != 'SYNC_APPROVED'
         run: exit 1
