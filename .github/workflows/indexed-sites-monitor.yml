@@ -29,6 +29,7 @@ jobs:
       - run: node tools/apply-turso-schema.mjs
       - run: rm -f db/links.sqlite db/results.sqlite
       - run: node crawler/src/cli.mjs init
+      - run: node tools/clear-local-staging.mjs
       - run: node tools/restore-turso-staging.mjs
       - name: Acquire staging write lock
         run: node tools/turso-job-lock.mjs acquire
