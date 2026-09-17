@@ -1,0 +1,36 @@
+name: Reset Crawler Staging Only
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_reset:
+        description: Type RESET_STAGING_ONLY to backup then clear staging
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  reset:
+    if: ${{ github.event.inputs.confirm_reset == 'RESET_STAGING_ONLY' }}
+    runs-on: ubuntu-latest
+    env:
+      TURSO_CRAWLER_DATABASE_URL: libsql://alzahf-karamkkr.aws-eu-west-1.turso.io
+      TURSO_CRAWLER_AUTH_TOKEN: ${{ secrets.TURSO_CRAWLER_AUTH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Backup and clear staging only
+        run: node tools/reset-staging-only.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: crawler-staging-backup-${{ github.run_id }}
+          path: |
+            staging-backup-*.tar.gz
+            staging-backup-*.tar.gz.sha256
+            staging-backup-*/manifest.json
+            staging-backup-*/reset-verification.json
+          retention-days: 90
