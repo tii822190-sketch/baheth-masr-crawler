@@ -12,6 +12,11 @@ on:
         description: Maximum pages per run
         required: false
         default: '500'
+      sync_production:
+        description: Sync approved rows to production after validation
+        required: false
+        default: 'false'
+        type: boolean
 concurrency:
   group: baheth-crawler-staging-write
   cancel-in-progress: false
@@ -40,6 +45,7 @@ jobs:
       CRAWLER_RETRY_FAILED: '0'
       CRAWLER_BATCH_SIZE: ${{ inputs.batch_size || '50' }}
       CRAWLER_MAX_PAGES: ${{ inputs.max_pages || '500' }}
+      SYNC_PRODUCTION: ${{ inputs.sync_production || 'false' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -73,13 +79,17 @@ jobs:
               echo "$validation"
             fi
             node tools/sync-turso-staging.mjs
-            sync_status=0
-            sync=$(node tools/sync-approved-production.mjs 2>&1) || sync_status=$?
-            echo "$sync"
-            if [ "$sync_status" -ne 0 ]; then
-              echo "Production sync returned non-zero status $sync_status; retaining staging results for the next scheduled run."
+            if [ "$SYNC_PRODUCTION" = "true" ]; then
+              sync_status=0
+              sync=$(node tools/sync-approved-production.mjs 2>&1) || sync_status=$?
+              echo "$sync"
+              if [ "$sync_status" -ne 0 ]; then
+                echo "Production sync returned non-zero status $sync_status; retaining staging results for the next scheduled run."
+              else
+                echo "Production sync completed."
+              fi
             else
-              echo "Production sync completed."
+              echo "Production sync disabled for this run; results remain in staging."
             fi
             [ "$processed" -eq 0 ] && break
           done
