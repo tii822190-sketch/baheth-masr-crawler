@@ -152,9 +152,20 @@ async function discoverSitemaps(siteId, siteUrl, persist = async () => {}) {
   return { added, sitemaps: seen.size };
 }
 
+function indexableCandidate(url) {
+  try {
+    const parsed = new URL(url);
+    const path = parsed.pathname.toLowerCase();
+    if (parsed.search) return false;
+    if (/^\/search(?:\/|$)/i.test(path) || /^\/label(?:\/|$)/i.test(path)) return false;
+    if (/^\/p\/(?:about|about-us|contact|contact-us|privacy|privacy-policy|terms|terms-of-service|blog-page|blog-page_\d+)/i.test(path)) return false;
+    return true;
+  } catch { return false; }
+}
+
 function enqueue(siteId, url) {
   const canonical = canonicalize(url);
-  if (!canonical || !allowed(canonical)) return false;
+  if (!canonical || !allowed(canonical) || !indexableCandidate(canonical)) return false;
   try {
     const result = links.prepare(`
       INSERT OR IGNORE INTO discovery_queue (site_id,url,canonical_url,status)
@@ -166,7 +177,7 @@ function enqueue(siteId, url) {
 
 function addPage(siteId, url) {
   const canonical = canonicalize(url);
-  if (!canonical || !allowed(canonical)) return false;
+  if (!canonical || !allowed(canonical) || !indexableCandidate(canonical)) return false;
   if (links.prepare('SELECT COUNT(*) AS count FROM site_pages WHERE site_id=?').get(siteId).count >= perSite) return false;
   try {
     const result = links.prepare(`
