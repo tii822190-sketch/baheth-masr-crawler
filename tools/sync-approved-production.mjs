@@ -18,6 +18,7 @@ async function pipeline(url, token, requests, label = 'database') {
   return body.results || [];
 }
 const syncRunId = Number(process.env.CRAWLER_SYNC_RUN_ID || 0);
+const replaceRoot = process.env.SYNC_REPLACE_ROOT === '1';
 const runFilter = syncRunId > 0 ? ' AND r.source_run_id=?' : '';
 const runArgs = syncRunId > 0 ? [arg('integer', syncRunId)] : [];
 const source = await pipeline(stagingUrl, stagingToken, [{ type: 'execute', stmt: { sql: `SELECT r.id,r.requested_url,r.canonical_url,r.title,r.description,r.extracted_text,r.search_text,r.icon_url,r.content_hash,r.http_status,v.validation_status,r.category_candidate,r.subcategory_candidates_json,r.classification_confidence FROM crawl_results r JOIN crawl_review_items v ON v.result_id=r.id WHERE r.distribution_status='approved' AND v.validation_status='approved' AND length(trim(r.title))>0 AND length(trim(r.description))>0 AND length(trim(r.extracted_text))>=200${runFilter} ORDER BY r.id`, args: runArgs } }], 'staging');
@@ -35,7 +36,12 @@ const rootKeywords = rootRow.subcategory_candidates_json || '[]';
 const priority = categoryPriority(rootCategory);
 const rootName = rootRow.title || rootUrl;
 const rootDescription = rootRow.description || '';
-const requests = [{ type: 'execute', stmt: { sql: `INSERT OR IGNORE INTO sites (name,url,canonical_url,description,icon_url,keywords,categories,priority,search_text,status,last_verified_at,failed_attempts,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,'active',CURRENT_TIMESTAMP,0,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`, args: [arg('text', rootName), arg('text', rootUrl), arg('text', rootUrl), arg('text', rootDescription), arg('text', rootRow.icon_url || ''), arg('text', rootKeywords), arg('text', rootCategory), arg('integer', priority), arg('text', rootRow.search_text || '')] } }];
+const requests = [];
+if (replaceRoot) {
+  requests.push({ type: 'execute', stmt: { sql: `DELETE FROM site_search_fts WHERE site_id=(SELECT id FROM sites WHERE canonical_url=?)`, args: [arg('text', rootUrl)] } });
+  requests.push({ type: 'execute', stmt: { sql: `DELETE FROM site_pages WHERE site_id=(SELECT id FROM sites WHERE canonical_url=?)`, args: [arg('text', rootUrl)] } });
+}
+requests.push({ type: 'execute', stmt: { sql: `INSERT OR IGNORE INTO sites (name,url,canonical_url,description,icon_url,keywords,categories,priority,search_text,status,last_verified_at,failed_attempts,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,'active',CURRENT_TIMESTAMP,0,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`, args: [arg('text', rootName), arg('text', rootUrl), arg('text', rootUrl), arg('text', rootDescription), arg('text', rootRow.icon_url || ''), arg('text', rootKeywords), arg('text', rootCategory), arg('integer', priority), arg('text', rootRow.search_text || '')] } });
 for (const row of rows) {
   const canonical = row.canonical_url || row.requested_url;
   const title = row.title || canonical;
@@ -59,4 +65,4 @@ const output = await pipeline(productionUrl, productionToken, requests, 'product
 const pages = output.at(-3)?.response?.result?.rows?.[0]?.[0]?.value ?? null;
 const fts = output.at(-2)?.response?.result?.rows?.[0]?.[0]?.value ?? null;
 if (Number(pages) < rows.length || Number(fts) < rows.length) throw Error(`Bulk verification failed: pages=${pages}, fts=${fts}, approved=${rows.length}`);
-console.log(JSON.stringify({ ok: true, approved_rows: rows.length, root_url: rootUrl, production_pages: pages, production_fts: fts, categories: [...new Set(rows.map((row) => row.category_candidate || 'other'))], validation: 'approved_only_quality_and_classification' }, null, 2));
+console.log(JSON.stringify({ ok: true, approved_rows: rows.length, root_url: rootUrl, replaced_root: replaceRoot, production_pages: pages, production_fts: fts, categories: [...new Set(rows.map((row) => row.category_candidate || 'other'))], validation: 'approved_only_quality_and_classification' }, null, 2));
