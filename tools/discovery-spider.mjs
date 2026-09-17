@@ -12,6 +12,7 @@ const maxAttempts = Math.max(1, Number(process.env.DISCOVERY_MAX_ATTEMPTS || 3))
 const browserBudgetMs = Math.max(1000, Number(process.env.DISCOVERY_BROWSER_BUDGET_MS || 12000));
 const registerExternalSites = process.env.DISCOVERY_REGISTER_EXTERNAL_SITES === '1';
 const sitemapLimit = Math.max(1, Number(process.env.DISCOVERY_MAX_SITEMAP_URLS || 5000));
+const archiveLimit = Math.max(1, Number(process.env.DISCOVERY_MAX_ARCHIVE_URLS || 5000));
 const allowedTlds = new Set(['eg', 'com', 'net', 'org', 'edu', 'gov', 'ai', 'jp']);
 const blocked = /\.(?:7z|apk|avi|bin|css|csv|docx?|exe|gif|iso|jpe?g|js|m3u8|mp3|mp4|pdf|png|pptx?|rar|svg|tar|webp|woff2?|xlsx?|zip)(?:$|[?#])/i;
 
@@ -70,9 +71,25 @@ async function fetchText(url) {
   finally { clearTimeout(timer); }
 }
 
-async function discoverSitemaps(siteId, siteUrl) {
+async function discoverFromArchive(siteId, siteUrl, persist = async () => {}) {
+  const host = new URL(siteUrl).hostname;
+  const endpoint = `https://web.archive.org/cdx/search/cdx?url=${encodeURIComponent(`${host}/*`)}&output=txt&filter=statuscode:200&collapse=urlkey&fl=original&limit=${archiveLimit}`;
+  const body = await fetchText(endpoint);
+  let added = 0;
+  for (const raw of body.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)) {
+    let url;
+    try { url = new URL(raw.replace(/^\[?"|"\]?$/g, ''), siteUrl).toString(); } catch { continue; }
+    if (allowed(url) && sameHost(siteUrl, url) && addPage(siteId, url)) {
+      added += 1;
+      if (added % checkpointSize === 0) await persist();
+    }
+  }
+  return added;
+}
+
+async function discoverSitemaps(siteId, siteUrl, persist = async () => {}) {
   const root = new URL(siteUrl);
-  const candidates = new Set([`${root.origin}/robots.txt`, `${root.origin}/sitemap.xml`, `${root.origin}/sitemap_index.xml`, `${root.origin}/sitemap-index.xml`, `${root.origin}/sitemap/sitemap.xml`]);
+  const candidates = new Set([`${root.origin}/robots.txt`, `${root.origin}/sitemap.xml`, `${root.origin}/sitemap_index.xml`, `${root.origin}/sitemap-index.xml`, `${root.origin}/sitemap/sitemap.xml`, `${root.origin}/sitemap/sitemap-index.xml`, `${root.origin}/post-sitemap.xml`, `${root.origin}/page-sitemap.xml`, `${root.origin}/sitemap-pages.xml`]);
   const robots = await fetchText(`${root.origin}/robots.txt`);
   for (const line of robots.split(/\r?\n/)) {
     const match = line.match(/^\s*sitemap\s*:\s*(\S+)/i);
@@ -93,7 +110,10 @@ async function discoverSitemaps(siteId, siteUrl) {
       try { url = new URL(match[1].trim(), sitemapUrl).toString(); } catch { continue; }
       if (!allowed(url) || !sameHost(siteUrl, url)) continue;
       if (isIndex || /(?:sitemap(?:[-_].*)?|\.xml)(?:\.gz)?$/i.test(url)) pending.push(url);
-      else if (addPage(siteId, url)) added += 1;
+      else if (addPage(siteId, url)) {
+        added += 1;
+        if (added % checkpointSize === 0) await persist();
+      }
       if (added >= sitemapLimit) break;
     }
   }
@@ -200,9 +220,19 @@ let stoppedByCheckpoint = false;
 
 for (const site of sites) {
   links.prepare("UPDATE sites SET discovery_status='processing' WHERE id=?").run(site.id);
-  const sitemapResult = await discoverSitemaps(site.id, site.url).catch(() => ({ added: 0, sitemaps: 0 }));
+  const persistBatch = async () => {
+    checkpoints += 1;
+    console.log(JSON.stringify({ checkpoint: checkpoints, processed, sites_scanned: sitesScanned, pages_queued: pagesQueued }));
+    await syncCheckpoint();
+  };
+  const sitemapResult = await discoverSitemaps(site.id, site.url, persistBatch).catch(() => ({ added: 0, sitemaps: 0 }));
   pagesQueued += sitemapResult.added;
   if (sitemapResult.sitemaps) console.log(JSON.stringify({ sitemap_first: true, site: site.url, sitemaps: sitemapResult.sitemaps, pages_from_sitemaps: sitemapResult.added }));
+  if (!sitemapResult.added) {
+    const archiveAdded = await discoverFromArchive(site.id, site.url, persistBatch).catch(() => 0);
+    pagesQueued += archiveAdded;
+    if (archiveAdded) console.log(JSON.stringify({ archive_fallback: true, site: site.url, pages_from_archive: archiveAdded }));
+  }
   if (!links.prepare('SELECT 1 FROM discovery_queue WHERE site_id=? LIMIT 1').get(site.id)) enqueue(site.id, site.url);
 
   let siteProcessed = 0;
@@ -221,7 +251,10 @@ for (const site of sites) {
     } else {
       const meta = extractHtml(response.body, response.url, response.type);
       if (sameHost(site.url, response.url)) {
-        if (addPage(site.id, response.url)) pagesQueued += 1;
+        if (addPage(site.id, response.url)) {
+          pagesQueued += 1;
+          if (pagesQueued % checkpointSize === 0) await persistBatch();
+        }
         for (const link of meta.internalLinks) {
           const normalized = canonicalize(link);
           if (normalized && sameHost(site.url, normalized)) enqueue(site.id, normalized);
