@@ -47,7 +47,7 @@ for (const [name, rawUrl, token] of configs) {
 }
 fs.writeFileSync(path.join(root, 'reset-manifest.json'), JSON.stringify({ created_at: new Date().toISOString(), databases: manifests.map((x) => ({ name: x.name, tables: x.tables })) }, null, 2) + '\n');
 for (const { name, rawUrl, token, tables } of manifests) {
-  const productionOrder = ['site_search_fts', 'site_search_fts_content', 'site_search_fts_docsize', 'site_search_fts_data', 'site_search_fts_idx', 'site_pages', 'sites'];
+  const productionOrder = ['site_search_fts', 'site_pages', 'sites'];
   const stagingOrder = ['crawl_quarantine', 'crawl_review_items', 'crawl_results', 'crawl_discoveries', 'crawl_observations', 'crawl_targets', 'crawl_site_queue', 'discovery_queue', 'site_pages', 'sites', 'crawl_runs'];
   const preferred = name === 'production' ? productionOrder : stagingOrder;
   const deletions = preferred.filter((table) => tables.includes(table)).map((table) => ({ type: 'execute', stmt: { sql: `DELETE FROM ${quote(table)}` } }));
