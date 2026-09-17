@@ -5,13 +5,19 @@ on:
   workflow_dispatch:
     inputs:
       seed_urls:
-        description: Seed URLs separated by |
+        description: Seed URLs separated by a vertical bar
         required: false
+        type: string
         default: ''
       mode:
-        description: Discovery mode: sitemap_only, crawl_only, or both
+        description: Discovery mode
         required: false
-        default: 'both'
+        type: choice
+        options:
+          - sitemap_only
+          - crawl_only
+          - both
+        default: both
 permissions:
   contents: read
 concurrency:
