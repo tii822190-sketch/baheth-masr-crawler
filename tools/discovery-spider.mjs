@@ -25,6 +25,7 @@ function allowed(url) {
     const decoded = decodeURIComponent(url);
     if (!/^https?:$/.test(u.protocol) || blocked.test(u.pathname) || /^(mailto|tel|javascript):/i.test(url)) return false;
     if (/[<>]|&lt;|&gt;|&quot;|\b(?:script|style|function|onclick)\b/i.test(decoded)) return false;
+    if (/\/feeds(?:\/|$)/i.test(u.pathname) || /comments\/default/i.test(u.pathname) || /(?:^|\/)(?:atom|rss)(?:\.xml)?$/i.test(u.pathname)) return false;
     const labels = u.hostname.toLowerCase().split('.');
     return labels.length >= 2 && allowedTlds.has(labels.at(-1));
   } catch { return false; }
