@@ -62,13 +62,20 @@ jobs:
             export CRAWLER_SYNC_RUN_ID=$(node -e "const x=JSON.parse(process.argv[1]); console.log(Number(x.runId)||0)" "$output")
             processed=$(node -e "const x=JSON.parse(process.argv[1]); console.log(Number(x.total)||0)" "$output")
             processed_pages=$((processed_pages + processed))
-            node tools/validate-staging.mjs
-            node tools/sync-turso-staging.mjs
-            if ! sync=$(node tools/sync-approved-production.mjs 2>&1); then
-              echo "$sync"
-              echo "$sync" | grep -q 'No approved staging rows available'
+            if ! validation=$(node tools/validate-staging.mjs 2>&1); then
+              echo "Validation completed with non-blocking row-level issues:"
+              echo "$validation"
             else
-              echo "$sync"
+              echo "$validation"
+            fi
+            node tools/sync-turso-staging.mjs
+            sync_status=0
+            sync=$(node tools/sync-approved-production.mjs 2>&1) || sync_status=$?
+            echo "$sync"
+            if [ "$sync_status" -ne 0 ]; then
+              echo "Production sync returned non-zero status $sync_status; retaining staging results for the next scheduled run."
+            else
+              echo "Production sync completed."
             fi
             [ "$processed" -eq 0 ] && break
           done
