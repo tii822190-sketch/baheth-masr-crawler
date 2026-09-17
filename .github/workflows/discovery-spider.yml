@@ -1,7 +1,7 @@
 name: Discovery Spider
 on:
   schedule:
-    - cron: '15 1 * * *'
+    - cron: '0 * * * *'
   workflow_dispatch:
     inputs:
       seed_urls:
@@ -25,12 +25,13 @@ jobs:
       TURSO_CRAWLER_AUTH_TOKEN: ${{ secrets.TURSO_CRAWLER_AUTH_TOKEN }}
       CRAWLER_INPUT_DB_PATH: db/links.sqlite
       DISCOVERY_MAX_SITES: '25'
-      DISCOVERY_MAX_PAGES_PER_SITE: '500'
-      DISCOVERY_CHECKPOINT_SIZE: '500'
+      DISCOVERY_MAX_PAGES_PER_SITE: '1000'
+      DISCOVERY_CHECKPOINT_SIZE: '1000'
       DISCOVERY_BROWSER_BUDGET_MS: '15000'
       DISCOVERY_REGISTER_EXTERNAL_SITES: '0'
       DISCOVERY_MAX_SITEMAP_URLS: '5000'
       DISCOVERY_MAX_ARCHIVE_URLS: '5000'
+      DISCOVERY_RUN_PAGE_LIMIT: '1000'
       DISCOVERY_MODE: ${{ inputs.mode || 'both' }}
       DISCOVERY_SEED_URLS: ${{ inputs.seed_urls || '' }}
     steps:

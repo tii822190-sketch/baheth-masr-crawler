@@ -6,14 +6,15 @@ import { canonicalize } from '../crawler/src/db.mjs';
 
 const links = new Database(process.env.CRAWLER_INPUT_DB_PATH || 'db/links.sqlite');
 const timeoutMs = Number(process.env.DISCOVERY_TIMEOUT_MS || 20000);
-const perSite = Math.max(1, Number(process.env.DISCOVERY_MAX_PAGES_PER_SITE || 500));
+const perSite = Math.max(1, Number(process.env.DISCOVERY_MAX_PAGES_PER_SITE || 1000));
 const maxSites = Math.max(1, Number(process.env.DISCOVERY_MAX_SITES || 25));
-const checkpointSize = Math.max(1, Number(process.env.DISCOVERY_CHECKPOINT_SIZE || 500));
+const checkpointSize = Math.max(1, Number(process.env.DISCOVERY_CHECKPOINT_SIZE || 1000));
 const maxAttempts = Math.max(1, Number(process.env.DISCOVERY_MAX_ATTEMPTS || 3));
 const browserBudgetMs = Math.max(1000, Number(process.env.DISCOVERY_BROWSER_BUDGET_MS || 12000));
 const registerExternalSites = process.env.DISCOVERY_REGISTER_EXTERNAL_SITES === '1';
-const sitemapLimit = Math.max(1, Number(process.env.DISCOVERY_MAX_SITEMAP_URLS || 5000));
-const archiveLimit = Math.max(1, Number(process.env.DISCOVERY_MAX_ARCHIVE_URLS || 5000));
+const runPageLimit = Math.max(1, Number(process.env.DISCOVERY_RUN_PAGE_LIMIT || 1000));
+const sitemapLimit = Math.min(runPageLimit, Math.max(1, Number(process.env.DISCOVERY_MAX_SITEMAP_URLS || 5000)));
+const archiveLimit = Math.min(runPageLimit, Math.max(1, Number(process.env.DISCOVERY_MAX_ARCHIVE_URLS || 5000)));
 const discoveryMode = ['sitemap_only', 'crawl_only', 'both'].includes(process.env.DISCOVERY_MODE) ? process.env.DISCOVERY_MODE : 'both';
 const allowedTlds = new Set(['eg', 'com', 'net', 'org', 'edu', 'gov', 'ai', 'jp']);
 const blocked = /\.(?:7z|apk|avi|bin|css|csv|docx?|exe|gif|iso|jpe?g|js|m3u8|mp3|mp4|pdf|png|pptx?|rar|svg|tar|webp|woff2?|xlsx?|zip)(?:$|[?#])/i;
@@ -213,7 +214,8 @@ function syncCheckpoint() {
 
 const sites = links.prepare(`
   SELECT id,url FROM sites
-  WHERE COALESCE(discovery_status,'pending') IN ('pending','processing')
+  WHERE COALESCE(discovery_status,'active') IN ('pending','processing')
+     OR (COALESCE(discovery_status,'active')='active' AND last_discovered_at IS NULL)
   ORDER BY COALESCE(last_discovered_at,'') ASC,id
   LIMIT ?
 `).all(maxSites);
@@ -243,7 +245,7 @@ for (const site of sites) {
       if (archiveAdded) console.log(JSON.stringify({ archive_fallback: true, mode: discoveryMode, site: site.url, pages_from_archive: archiveAdded }));
     }
   }
-  if (discoveryMode === 'sitemap_only') {
+  if (discoveryMode === 'sitemap_only' || pagesQueued >= runPageLimit) {
     links.prepare("UPDATE sites SET discovery_status='completed', last_discovered_at=CURRENT_TIMESTAMP WHERE id=?").run(site.id);
     sitesScanned += 1;
     continue;
@@ -251,7 +253,7 @@ for (const site of sites) {
   if (!links.prepare('SELECT 1 FROM discovery_queue WHERE site_id=? LIMIT 1').get(site.id)) enqueue(site.id, site.url);
 
   let siteProcessed = 0;
-  while (siteProcessed < perSite) {
+  while (siteProcessed < Math.min(perSite, Math.max(0, runPageLimit - pagesQueued))) {
     const item = links.prepare(`
       SELECT id,url FROM discovery_queue
       WHERE site_id=? AND status IN ('pending','processing','failed') AND attempts < ?
@@ -303,7 +305,7 @@ for (const site of sites) {
     UPDATE sites
     SET discovery_status=?, last_discovered_at=CURRENT_TIMESTAMP
     WHERE id=?
-  `).run(remaining > 0 ? 'processing' : 'active', site.id);
+  `).run(remaining > 0 ? 'processing' : 'completed', site.id);
   sitesScanned += 1;
   if (stoppedByCheckpoint) break;
 }

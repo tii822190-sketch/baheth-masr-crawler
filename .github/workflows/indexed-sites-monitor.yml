@@ -1,7 +1,7 @@
 name: Indexed Sites Monitor
 on:
   schedule:
-    - cron: '0 */2 * * *'
+    - cron: '0 */3 * * *'
   workflow_dispatch:
 permissions:
   contents: read
@@ -16,12 +16,15 @@ jobs:
       TURSO_CRAWLER_AUTH_TOKEN: ${{ secrets.TURSO_CRAWLER_AUTH_TOKEN }}
       CRAWLER_INPUT_DB_PATH: db/links.sqlite
       MONITOR_MAX_SITES: '100'
+      MONITOR_MAX_NEW_PAGES: '1000'
+      MONITOR_BROWSER_BUDGET_MS: '12000'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
       - run: npm ci
       - run: node tools/apply-turso-schema.mjs
+      - run: rm -f db/links.sqlite db/results.sqlite
       - run: node crawler/src/cli.mjs init
       - run: node tools/restore-turso-staging.mjs
       - name: Monitor indexed sites and queue new pages
