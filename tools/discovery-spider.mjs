@@ -9,6 +9,7 @@ const perSite = Math.max(1, Number(process.env.DISCOVERY_MAX_PAGES_PER_SITE || 5
 const maxSites = Math.max(1, Number(process.env.DISCOVERY_MAX_SITES || 25));
 const checkpointSize = Math.max(1, Number(process.env.DISCOVERY_CHECKPOINT_SIZE || 500));
 const maxAttempts = Math.max(1, Number(process.env.DISCOVERY_MAX_ATTEMPTS || 3));
+const browserBudgetMs = Math.max(1000, Number(process.env.DISCOVERY_BROWSER_BUDGET_MS || 12000));
 const allowedTlds = new Set(['eg', 'com', 'net', 'org', 'edu', 'gov', 'ai', 'jp']);
 const blocked = /\.(?:7z|apk|avi|bin|css|csv|docx?|exe|gif|iso|jpe?g|js|m3u8|mp3|mp4|pdf|png|pptx?|rar|svg|tar|webp|woff2?|xlsx?|zip)(?:$|[?#])/i;
 
@@ -27,6 +28,16 @@ function sameHost(a, b) {
   } catch { return false; }
 }
 
+async function browserHtml(url) {
+  return await new Promise((resolve) => {
+    const child = spawn('/usr/bin/chromium', ['--headless=new', '--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage', `--virtual-time-budget=${browserBudgetMs}`, '--run-all-compositor-stages-before-draw', '--dump-dom', url], { stdio: ['ignore', 'pipe', 'ignore'] });
+    let body = '';
+    const timer = setTimeout(() => { child.kill('SIGKILL'); resolve(null); }, timeoutMs + browserBudgetMs);
+    child.stdout.on('data', (chunk) => { body += chunk; });
+    child.on('close', (code) => { clearTimeout(timer); resolve(code === 0 && body.trim() ? { url, body, type: 'text/html' } : null); });
+  });
+}
+
 async function fetchHtml(url) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -38,7 +49,10 @@ async function fetchHtml(url) {
     });
     const type = response.headers.get('content-type') || '';
     if (!response.ok || !type.toLowerCase().includes('html')) return null;
-    return { url: response.url || url, body: await response.text(), type };
+    const body = await response.text();
+    const meta = extractHtml(body, response.url || url, type);
+    if (meta.qualityStatus === 'dynamic_content' || meta.extractedText.length < 80) return (await browserHtml(response.url || url)) || { url: response.url || url, body, type };
+    return { url: response.url || url, body, type };
   } catch { return null; }
   finally { clearTimeout(timer); }
 }
