@@ -15,4 +15,3 @@ const errors = (body.results || []).filter((x) => x.type === 'error' || x.respon
 if (errors.length) throw new Error(`FTS rebuild error: ${JSON.stringify(errors)}`);
 const count = body.results?.[2]?.response?.result?.rows?.[0]?.[0]?.value ?? null;
 console.log(JSON.stringify({ ok: true, rebuilt: true, rows: Number(count) }, null, 2));
-EOF
