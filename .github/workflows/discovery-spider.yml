@@ -24,6 +24,7 @@ jobs:
       DISCOVERY_MAX_PAGES_PER_SITE: '500'
       DISCOVERY_CHECKPOINT_SIZE: '500'
       DISCOVERY_BROWSER_BUDGET_MS: '15000'
+      DISCOVERY_REGISTER_EXTERNAL_SITES: '0'
       DISCOVERY_SEED_URLS: ${{ inputs.seed_urls || '' }}
     steps:
       - uses: actions/checkout@v4

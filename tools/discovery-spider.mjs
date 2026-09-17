@@ -10,6 +10,7 @@ const maxSites = Math.max(1, Number(process.env.DISCOVERY_MAX_SITES || 25));
 const checkpointSize = Math.max(1, Number(process.env.DISCOVERY_CHECKPOINT_SIZE || 500));
 const maxAttempts = Math.max(1, Number(process.env.DISCOVERY_MAX_ATTEMPTS || 3));
 const browserBudgetMs = Math.max(1000, Number(process.env.DISCOVERY_BROWSER_BUDGET_MS || 12000));
+const registerExternalSites = process.env.DISCOVERY_REGISTER_EXTERNAL_SITES === '1';
 const allowedTlds = new Set(['eg', 'com', 'net', 'org', 'edu', 'gov', 'ai', 'jp']);
 const blocked = /\.(?:7z|apk|avi|bin|css|csv|docx?|exe|gif|iso|jpe?g|js|m3u8|mp3|mp4|pdf|png|pptx?|rar|svg|tar|webp|woff2?|xlsx?|zip)(?:$|[?#])/i;
 
@@ -180,7 +181,7 @@ for (const site of sites) {
           const normalized = canonicalize(link);
           if (normalized && sameHost(site.url, normalized)) enqueue(site.id, normalized);
         }
-        for (const link of meta.externalLinks) {
+        for (const link of registerExternalSites ? meta.externalLinks : []) {
           const normalized = canonicalize(link);
           if (!normalized || !allowed(normalized)) continue;
           const newSite = addSite(normalized);
