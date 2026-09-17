@@ -15,7 +15,7 @@ on:
       sync_production:
         description: Sync approved rows to production after validation
         required: false
-        default: 'false'
+        default: 'true'
         type: boolean
 concurrency:
   group: baheth-crawler-staging-write
@@ -46,7 +46,7 @@ jobs:
       CRAWLER_RETRY_FAILED: '0'
       CRAWLER_BATCH_SIZE: ${{ inputs.batch_size || '50' }}
       CRAWLER_MAX_PAGES: ${{ inputs.max_pages || '500' }}
-      SYNC_PRODUCTION: ${{ inputs.sync_production || 'false' }}
+      SYNC_PRODUCTION: ${{ inputs.sync_production || 'true' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
