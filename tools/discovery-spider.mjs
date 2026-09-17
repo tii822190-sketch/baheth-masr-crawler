@@ -14,6 +14,7 @@ const browserBudgetMs = Math.max(1000, Number(process.env.DISCOVERY_BROWSER_BUDG
 const registerExternalSites = process.env.DISCOVERY_REGISTER_EXTERNAL_SITES === '1';
 const sitemapLimit = Math.max(1, Number(process.env.DISCOVERY_MAX_SITEMAP_URLS || 5000));
 const archiveLimit = Math.max(1, Number(process.env.DISCOVERY_MAX_ARCHIVE_URLS || 5000));
+const discoveryMode = ['sitemap_only', 'crawl_only', 'both'].includes(process.env.DISCOVERY_MODE) ? process.env.DISCOVERY_MODE : 'both';
 const allowedTlds = new Set(['eg', 'com', 'net', 'org', 'edu', 'gov', 'ai', 'jp']);
 const blocked = /\.(?:7z|apk|avi|bin|css|csv|docx?|exe|gif|iso|jpe?g|js|m3u8|mp3|mp4|pdf|png|pptx?|rar|svg|tar|webp|woff2?|xlsx?|zip)(?:$|[?#])/i;
 
@@ -231,13 +232,21 @@ for (const site of sites) {
     console.log(JSON.stringify({ checkpoint: checkpoints, processed, sites_scanned: sitesScanned, pages_queued: pagesQueued }));
     await syncCheckpoint();
   };
-  const sitemapResult = await discoverSitemaps(site.id, site.url, persistBatch).catch(() => ({ added: 0, sitemaps: 0 }));
-  pagesQueued += sitemapResult.added;
-  if (sitemapResult.sitemaps) console.log(JSON.stringify({ sitemap_first: true, site: site.url, sitemaps: sitemapResult.sitemaps, pages_from_sitemaps: sitemapResult.added }));
-  if (!sitemapResult.added) {
-    const archiveAdded = await discoverFromArchive(site.id, site.url, persistBatch).catch(() => 0);
-    pagesQueued += archiveAdded;
-    if (archiveAdded) console.log(JSON.stringify({ archive_fallback: true, site: site.url, pages_from_archive: archiveAdded }));
+  let sitemapResult = { added: 0, sitemaps: 0 };
+  if (discoveryMode !== 'crawl_only') {
+    sitemapResult = await discoverSitemaps(site.id, site.url, persistBatch).catch(() => ({ added: 0, sitemaps: 0 }));
+    pagesQueued += sitemapResult.added;
+    if (sitemapResult.sitemaps) console.log(JSON.stringify({ sitemap_first: true, mode: discoveryMode, site: site.url, sitemaps: sitemapResult.sitemaps, pages_from_sitemaps: sitemapResult.added }));
+    if (!sitemapResult.added) {
+      const archiveAdded = await discoverFromArchive(site.id, site.url, persistBatch).catch(() => 0);
+      pagesQueued += archiveAdded;
+      if (archiveAdded) console.log(JSON.stringify({ archive_fallback: true, mode: discoveryMode, site: site.url, pages_from_archive: archiveAdded }));
+    }
+  }
+  if (discoveryMode === 'sitemap_only') {
+    links.prepare("UPDATE sites SET discovery_status='completed', last_discovered_at=CURRENT_TIMESTAMP WHERE id=?").run(site.id);
+    sitesScanned += 1;
+    continue;
   }
   if (!links.prepare('SELECT 1 FROM discovery_queue WHERE site_id=? LIMIT 1').get(site.id)) enqueue(site.id, site.url);
 

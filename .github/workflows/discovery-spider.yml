@@ -8,6 +8,10 @@ on:
         description: Seed URLs separated by |
         required: false
         default: ''
+      mode:
+        description: Discovery mode: sitemap_only, crawl_only, or both
+        required: false
+        default: 'both'
 permissions:
   contents: read
 concurrency:
@@ -27,6 +31,7 @@ jobs:
       DISCOVERY_REGISTER_EXTERNAL_SITES: '0'
       DISCOVERY_MAX_SITEMAP_URLS: '5000'
       DISCOVERY_MAX_ARCHIVE_URLS: '5000'
+      DISCOVERY_MODE: ${{ inputs.mode || 'both' }}
       DISCOVERY_SEED_URLS: ${{ inputs.seed_urls || '' }}
     steps:
       - uses: actions/checkout@v4
