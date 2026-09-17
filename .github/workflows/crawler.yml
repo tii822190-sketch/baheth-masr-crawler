@@ -23,7 +23,7 @@ on:
       sync_production:
         description: Sync approved rows to production database 1 after every batch
         required: true
-        default: 'true'
+        default: 'false'
         type: boolean
       passes:
         description: Number of 50-page batches to process (up to max_pages)
