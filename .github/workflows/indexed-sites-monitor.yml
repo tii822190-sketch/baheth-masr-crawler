@@ -1,12 +1,12 @@
 name: Indexed Sites Monitor
 on:
   schedule:
-    - cron: '0 */3 * * *'
+    - cron: '20 */3 * * *'
   workflow_dispatch:
 permissions:
   contents: read
 concurrency:
-  group: baheth-crawler-staging
+  group: baheth-crawler-staging-write
   cancel-in-progress: false
 jobs:
   monitor:
@@ -30,8 +30,13 @@ jobs:
       - run: rm -f db/links.sqlite db/results.sqlite
       - run: node crawler/src/cli.mjs init
       - run: node tools/restore-turso-staging.mjs
+      - name: Acquire staging write lock
+        run: node tools/turso-job-lock.mjs acquire
       - name: Monitor indexed sites and queue new pages
         run: node tools/indexed-sites-monitor.mjs
+      - name: Release staging write lock
+        if: always()
+        run: node tools/turso-job-lock.mjs release || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:

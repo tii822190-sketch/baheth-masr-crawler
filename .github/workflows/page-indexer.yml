@@ -1,7 +1,7 @@
 name: Page Indexer
 on:
   schedule:
-    - cron: '*/30 * * * *'
+    - cron: '40 * * * *'
   workflow_dispatch:
     inputs:
       batch_size:
@@ -13,7 +13,7 @@ on:
         required: false
         default: '500'
 concurrency:
-  group: baheth-crawler-staging
+  group: baheth-crawler-staging-write
   cancel-in-progress: false
 permissions:
   contents: read
@@ -49,6 +49,8 @@ jobs:
       - run: rm -f db/links.sqlite db/results.sqlite
       - run: node crawler/src/cli.mjs init
       - run: node tools/restore-turso-staging.mjs
+      - name: Acquire staging write lock
+        run: node tools/turso-job-lock.mjs acquire
       - name: Index pages from site_pages only
         run: |
           set -e
@@ -80,6 +82,9 @@ jobs:
             fi
             [ "$processed" -eq 0 ] && break
           done
+      - name: Release staging write lock
+        if: always()
+        run: node tools/turso-job-lock.mjs release || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
