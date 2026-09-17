@@ -5,7 +5,7 @@ const token = process.env.TURSO_CRAWLER_AUTH_TOKEN;
 const lockName = process.env.CRAWLER_LOCK_NAME || 'baheth-crawler-staging-write';
 const ownerId = process.env.CRAWLER_LOCK_OWNER || `${process.env.GITHUB_WORKFLOW || 'local'}:${process.env.GITHUB_JOB || 'job'}`;
 const runId = process.env.CRAWLER_LOCK_RUN_ID || process.env.GITHUB_RUN_ID || `local-${process.pid}`;
-const ttlMinutes = Math.max(10, Number(process.env.CRAWLER_LOCK_TTL_MINUTES || 120));
+const ttlMinutes = Math.max(10, Number(process.env.CRAWLER_LOCK_TTL_MINUTES || 75));
 if (!rawUrl || !token) throw new Error('TURSO_CRAWLER_DATABASE_URL and TURSO_CRAWLER_AUTH_TOKEN are required');
 const baseUrl = rawUrl.replace(/^libsql:\/\//, 'https://').replace(/^turso:\/\//, 'https://').replace(/\/$/, '');
 const arg = (type, value) => ({ type, value: String(value) });

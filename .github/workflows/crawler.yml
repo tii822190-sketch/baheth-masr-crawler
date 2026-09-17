@@ -50,6 +50,7 @@ concurrency:
 jobs:
   crawl:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     env:
       CRAWLER_LIMIT: ${{ github.event.inputs.limit || '10' }}
       CRAWLER_MANUAL_URL: ${{ github.event.inputs.manual_url || '' }}
