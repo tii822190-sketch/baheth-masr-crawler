@@ -101,6 +101,14 @@ function pendingForSite(siteId) {
   `).get(siteId, maxAttempts).count;
 }
 
+for (const seed of String(process.env.DISCOVERY_SEED_URLS || '').split('|').map((value) => value.trim()).filter(Boolean)) {
+  const siteId = addSite(seed);
+  if (siteId) {
+    links.prepare("UPDATE sites SET discovery_status='pending' WHERE id=?").run(siteId);
+    enqueue(siteId, seed);
+  }
+}
+
 function syncCheckpoint() {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, ['tools/sync-turso-staging.mjs'], {

@@ -3,6 +3,11 @@ on:
   schedule:
     - cron: '15 1 * * *'
   workflow_dispatch:
+    inputs:
+      seed_urls:
+        description: Seed URLs separated by |
+        required: false
+        default: ''
 permissions:
   contents: read
 concurrency:
@@ -18,6 +23,7 @@ jobs:
       DISCOVERY_MAX_SITES: '25'
       DISCOVERY_MAX_PAGES_PER_SITE: '500'
       DISCOVERY_CHECKPOINT_SIZE: '500'
+      DISCOVERY_SEED_URLS: ${{ inputs.seed_urls || '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
