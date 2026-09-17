@@ -91,7 +91,9 @@ jobs:
             else
               echo "Production sync disabled for this run; results remain in staging."
             fi
-            [ "$processed" -eq 0 ] && break
+            if [ "$processed" -eq 0 ]; then
+              break
+            fi
           done
       - name: Release staging write lock
         if: always()
