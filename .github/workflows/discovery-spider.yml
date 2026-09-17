@@ -31,6 +31,7 @@ jobs:
       TURSO_CRAWLER_DATABASE_URL: libsql://alzahf-karamkkr.aws-eu-west-1.turso.io
       TURSO_CRAWLER_AUTH_TOKEN: ${{ secrets.TURSO_CRAWLER_AUTH_TOKEN }}
       CRAWLER_INPUT_DB_PATH: db/links.sqlite
+      CRAWLER_SEED_STAGING: '0'
       DISCOVERY_MAX_SITES: '25'
       DISCOVERY_MAX_PAGES_PER_SITE: '1000'
       DISCOVERY_CHECKPOINT_SIZE: '1000'
