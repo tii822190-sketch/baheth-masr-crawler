@@ -65,4 +65,6 @@ const output = await pipeline(productionUrl, productionToken, requests, 'product
 const pages = output.at(-3)?.response?.result?.rows?.[0]?.[0]?.value ?? null;
 const fts = output.at(-2)?.response?.result?.rows?.[0]?.[0]?.value ?? null;
 if (Number(pages) < rows.length || Number(fts) < rows.length) throw Error(`Bulk verification failed: pages=${pages}, fts=${fts}, approved=${rows.length}`);
+const syncedIds = rows.map((row) => arg('integer', row.id));
+await pipeline(stagingUrl, stagingToken, [{ type: 'execute', stmt: { sql: `UPDATE crawl_results SET distribution_status='synced' WHERE id IN (${syncedIds.map(() => '?').join(',')}) AND distribution_status='approved'`, args: syncedIds } }], 'staging');
 console.log(JSON.stringify({ ok: true, approved_rows: rows.length, root_url: rootUrl, replaced_root: replaceRoot, production_pages: pages, production_fts: fts, categories: [...new Set(rows.map((row) => row.category_candidate || 'other'))], validation: 'approved_only_quality_and_classification' }, null, 2));

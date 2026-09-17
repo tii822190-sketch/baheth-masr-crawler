@@ -1,7 +1,7 @@
 name: Indexed Sites Monitor
 on:
   schedule:
-    - cron: '20 */3 * * *'
+    - cron: '0 1 * * *'
   workflow_dispatch:
 permissions:
   contents: read

@@ -1,7 +1,7 @@
 name: Page Indexer
 on:
   schedule:
-    - cron: '40 * * * *'
+    - cron: '0 2 * * *'
   workflow_dispatch:
     inputs:
       batch_size:
@@ -87,10 +87,13 @@ jobs:
                 echo "Production sync returned non-zero status $sync_status; retaining staging results for the next scheduled run."
               else
                 echo "Production sync completed."
+                node tools/mark-synced-staging.mjs
+                node tools/sync-turso-staging.mjs
               fi
             else
               echo "Production sync disabled for this run; results remain in staging."
             fi
+            node tools/turso-job-lock.mjs heartbeat
             if [ "$processed" -eq 0 ]; then
               break
             fi
