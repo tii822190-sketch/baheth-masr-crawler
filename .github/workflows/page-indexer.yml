@@ -20,6 +20,7 @@ permissions:
 jobs:
   index:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     env:
       TURSO_CRAWLER_DATABASE_URL: libsql://alzahf-karamkkr.aws-eu-west-1.turso.io
       TURSO_CRAWLER_AUTH_TOKEN: ${{ secrets.TURSO_CRAWLER_AUTH_TOKEN }}
