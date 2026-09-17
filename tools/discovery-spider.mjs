@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { gunzipSync } from 'node:zlib';
 import Database from 'better-sqlite3';
 import { extractHtml } from '../crawler/src/extract.mjs';
 import { canonicalize } from '../crawler/src/db.mjs';
@@ -66,7 +67,9 @@ async function fetchText(url) {
   try {
     const response = await fetch(url, { signal: controller.signal, redirect: 'follow', headers: { 'user-agent': 'BahethMasrDiscovery/3.0 (+sitemap-first)' } });
     if (!response.ok) return '';
-    return await response.text();
+    const bytes = Buffer.from(await response.arrayBuffer());
+    if (url.endsWith('.gz') || (bytes[0] === 0x1f && bytes[1] === 0x8b)) return gunzipSync(bytes).toString('utf8');
+    return bytes.toString('utf8');
   } catch { return ''; }
   finally { clearTimeout(timer); }
 }
@@ -103,11 +106,14 @@ async function discoverSitemaps(siteId, siteUrl, persist = async () => {}) {
     if (seen.has(sitemapUrl)) continue;
     seen.add(sitemapUrl);
     const xml = await fetchText(sitemapUrl);
-    if (!xml || !/<(?:urlset|sitemapindex)\b/i.test(xml)) continue;
+    if (!xml || /\/robots\.txt$/i.test(sitemapUrl)) continue;
     const isIndex = /<sitemapindex\b/i.test(xml);
-    for (const match of xml.matchAll(/<loc[^>]*>\s*([^<]+?)\s*<\/loc>/gi)) {
+    const rawLocs = /<(?:urlset|sitemapindex)\b/i.test(xml)
+      ? [...xml.matchAll(/<loc[^>]*>\s*([^<]+?)\s*<\/loc>/gi)].map((match) => match[1].trim())
+      : xml.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    for (const rawLoc of rawLocs) {
       let url;
-      try { url = new URL(match[1].trim(), sitemapUrl).toString(); } catch { continue; }
+      try { url = new URL(rawLoc, sitemapUrl).toString(); } catch { continue; }
       if (!allowed(url) || !sameHost(siteUrl, url)) continue;
       if (isIndex || /(?:sitemap(?:[-_].*)?|\.xml)(?:\.gz)?$/i.test(url)) pending.push(url);
       else if (addPage(siteId, url)) {
