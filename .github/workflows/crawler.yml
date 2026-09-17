@@ -44,6 +44,9 @@ on:
         default: '500'
 permissions:
   contents: read
+concurrency:
+  group: baheth-crawler-staging-write
+  cancel-in-progress: false
 jobs:
   crawl:
     runs-on: ubuntu-latest
@@ -80,6 +83,8 @@ jobs:
       - run: node crawler/src/cli.mjs init
       - name: Restore previous crawler checkpoint
         run: node tools/restore-turso-staging.mjs
+      - name: Acquire staging write lock
+        run: node tools/turso-job-lock.mjs acquire
       - name: Crawl configured passes
         env:
           CRAWLER_PASSES: ${{ github.event.inputs.passes || '1' }}
@@ -121,7 +126,9 @@ jobs:
             else
               echo "$sync_output"
             fi
-          fi
+      - name: Release staging write lock
+        if: always()
+        run: node tools/turso-job-lock.mjs release || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
