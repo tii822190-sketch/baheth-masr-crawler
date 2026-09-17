@@ -1,17 +1,47 @@
-name: Sync Approved Crawler Data to Production
+name: Sync Approved Production
 on:
   workflow_dispatch:
+    inputs:
+      confirm:
+        description: Type SYNC_APPROVED to enable production synchronization
+        required: true
+        default: ''
+        type: string
+concurrency:
+  group: baheth-crawler-staging-write
+  cancel-in-progress: false
+permissions:
+  contents: read
 jobs:
   sync:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     env:
       TURSO_CRAWLER_DATABASE_URL: libsql://alzahf-karamkkr.aws-eu-west-1.turso.io
       TURSO_CRAWLER_AUTH_TOKEN: ${{ secrets.TURSO_CRAWLER_AUTH_TOKEN }}
       TURSO_PRODUCTION_DATABASE_URL: ${{ secrets.TURSO_PRODUCTION_DATABASE_URL }}
       TURSO_PRODUCTION_AUTH_TOKEN: ${{ secrets.TURSO_PRODUCTION_AUTH_TOKEN }}
+      CRAWLER_INPUT_DB_PATH: db/links.sqlite
+      CRAWLER_RESULTS_DB_PATH: db/results.sqlite
+      CONFIRM_SYNC: ${{ inputs.confirm }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 22 }
-      - name: Sync approved row and verify page plus FTS
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: node tools/apply-turso-schema.mjs
+      - run: rm -f db/links.sqlite db/results.sqlite
+      - run: node crawler/src/cli.mjs init
+      - run: node tools/clear-local-staging.mjs
+      - run: node tools/restore-turso-staging.mjs
+      - name: Acquire staging write lock
+        run: node tools/turso-job-lock.mjs acquire
+      - name: Sync approved rows only
+        if: env.CONFIRM_SYNC == 'SYNC_APPROVED'
         run: node tools/sync-approved-production.mjs
+      - name: Reject missing confirmation
+        if: env.CONFIRM_SYNC != 'SYNC_APPROVED'
+        run: exit 1
+      - name: Release staging write lock
+        if: always()
+        run: node tools/turso-job-lock.mjs release || true
