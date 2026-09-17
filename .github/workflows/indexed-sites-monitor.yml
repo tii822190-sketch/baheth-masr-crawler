@@ -11,13 +11,16 @@ concurrency:
 jobs:
   monitor:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     env:
       TURSO_CRAWLER_DATABASE_URL: libsql://alzahf-karamkkr.aws-eu-west-1.turso.io
       TURSO_CRAWLER_AUTH_TOKEN: ${{ secrets.TURSO_CRAWLER_AUTH_TOKEN }}
       CRAWLER_INPUT_DB_PATH: db/links.sqlite
-      MONITOR_MAX_SITES: '100'
+      MONITOR_MAX_SITES: '25'
       MONITOR_MAX_NEW_PAGES: '1000'
-      MONITOR_BROWSER_BUDGET_MS: '12000'
+      MONITOR_TIMEOUT_MS: '10000'
+      MONITOR_BROWSER_BUDGET_MS: '6000'
+      MONITOR_MAX_MAPS_PER_SITE: '40'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
