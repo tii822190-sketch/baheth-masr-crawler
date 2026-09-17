@@ -78,6 +78,9 @@ jobs:
       - name: Initialize crawler databases
         if: steps.claim.outputs.claimed == 'true'
         run: node crawler/src/cli.mjs init
+      - name: Clear local seed data
+        if: steps.claim.outputs.claimed == 'true'
+        run: node tools/clear-local-staging.mjs
       - name: Restore previous crawler checkpoint
         if: steps.claim.outputs.claimed == 'true'
         run: node tools/restore-turso-staging.mjs
