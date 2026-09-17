@@ -22,10 +22,37 @@ const blocked = /\.(?:7z|apk|avi|bin|css|csv|docx?|exe|gif|iso|jpe?g|js|m3u8|mp3
 function allowed(url) {
   try {
     const u = new URL(url);
+    const decoded = decodeURIComponent(url);
     if (!/^https?:$/.test(u.protocol) || blocked.test(u.pathname) || /^(mailto|tel|javascript):/i.test(url)) return false;
+    if (/[<>]|&lt;|&gt;|&quot;|\b(?:script|style|function|onclick)\b/i.test(decoded)) return false;
     const labels = u.hostname.toLowerCase().split('.');
     return labels.length >= 2 && allowedTlds.has(labels.at(-1));
   } catch { return false; }
+}
+
+function extractXmlLinks(xml, baseUrl) {
+  const text = String(xml || '').replace(/^\uFEFF/, '').trim();
+  if (!text || /<\s*(?:!doctype\s+html|html\b)/i.test(text)) return { valid: false, links: [], nested: [] };
+  const root = text.match(/<\s*([a-z][\w:.-]*)\b/i)?.[1]?.toLowerCase() || '';
+  const isSitemap = root === 'urlset' || root === 'sitemapindex';
+  const isFeed = root === 'feed' || root === 'rss' || root === 'rdf:rdf';
+  if (!isSitemap && !isFeed) return { valid: false, links: [], nested: [] };
+  const links = [];
+  const add = (raw) => {
+    try {
+      const value = new URL(String(raw).trim(), baseUrl).toString();
+      if (allowed(value) && !links.includes(value)) links.push(value);
+    } catch {}
+  };
+  for (const match of text.matchAll(/<loc\b[^>]*>\s*([^<]+?)\s*<\/loc>/gi)) add(match[1]);
+  if (isFeed) {
+    for (const entry of text.matchAll(/<(?:entry|item)\b[\s\S]*?<\/((?:entry|item))>/gi)) {
+      for (const match of entry[0].matchAll(/<link\b[^>]*?\bhref\s*=\s*["']([^"']+)["'][^>]*>/gi)) add(match[1]);
+      for (const match of entry[0].matchAll(/<link\b[^>]*>([^<]+)<\/link>/gi)) add(match[1]);
+    }
+  }
+  const nested = links.filter((url) => /(?:sitemap(?:[-_].*)?|\.xml)(?:\.gz)?$/i.test(new URL(url).pathname));
+  return { valid: true, links, nested };
 }
 
 function sameHost(a, b) {
@@ -109,15 +136,11 @@ async function discoverSitemaps(siteId, siteUrl, persist = async () => {}) {
     seen.add(sitemapUrl);
     const xml = await fetchText(sitemapUrl);
     if (!xml || /\/robots\.txt$/i.test(sitemapUrl)) continue;
-    const isIndex = /<sitemapindex\b/i.test(xml);
-    const rawLocs = /<(?:urlset|sitemapindex)\b/i.test(xml)
-      ? [...xml.matchAll(/<loc[^>]*>\s*([^<]+?)\s*<\/loc>/gi)].map((match) => match[1].trim())
-      : xml.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-    for (const rawLoc of rawLocs) {
-      let url;
-      try { url = new URL(rawLoc, sitemapUrl).toString(); } catch { continue; }
-      if (!allowed(url) || !sameHost(siteUrl, url)) continue;
-      if (isIndex || /(?:sitemap(?:[-_].*)?|\.xml)(?:\.gz)?$/i.test(url)) pending.push(url);
+    const parsed = extractXmlLinks(xml, sitemapUrl);
+    if (!parsed.valid) continue;
+    for (const url of parsed.links) {
+      if (!sameHost(siteUrl, url)) continue;
+      if (parsed.nested.includes(url)) pending.push(url);
       else if (addPage(siteId, url)) {
         added += 1;
         if (added % checkpointSize === 0) await persist();
@@ -143,6 +166,7 @@ function enqueue(siteId, url) {
 function addPage(siteId, url) {
   const canonical = canonicalize(url);
   if (!canonical || !allowed(canonical)) return false;
+  if (links.prepare('SELECT COUNT(*) AS count FROM site_pages WHERE site_id=?').get(siteId).count >= perSite) return false;
   try {
     const result = links.prepare(`
       INSERT OR IGNORE INTO site_pages (site_id,url,discovered_at,crawl_status)
