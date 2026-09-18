@@ -128,28 +128,47 @@ async function discoverSitemaps(siteId, siteUrl, persist = async () => {}) {
     const match = line.match(/^\s*sitemap\s*:\s*(\S+)/i);
     if (match && allowed(match[1])) candidates.add(match[1]);
   }
-  const pending = [...candidates];
-  const seen = new Set();
+  const existing = links.prepare('SELECT pending_urls,seen_urls,current_url,current_offset,status FROM discovery_sitemap_cursor WHERE site_id=?').get(siteId);
+  let pending = existing ? JSON.parse(existing.pending_urls || '[]') : [...candidates];
+  const seen = new Set(existing ? JSON.parse(existing.seen_urls || '[]') : []);
+  let currentUrl = existing?.current_url || '';
+  let currentOffset = Number(existing?.current_offset || 0);
+  const saveCursor = (status = 'processing') => links.prepare(`
+    INSERT INTO discovery_sitemap_cursor (site_id,pending_urls,seen_urls,current_url,current_offset,status,updated_at)
+    VALUES (?,?,?,?,?,?,CURRENT_TIMESTAMP)
+    ON CONFLICT(site_id) DO UPDATE SET pending_urls=excluded.pending_urls,seen_urls=excluded.seen_urls,current_url=excluded.current_url,current_offset=excluded.current_offset,status=excluded.status,updated_at=CURRENT_TIMESTAMP
+  `).run(siteId, JSON.stringify(pending), JSON.stringify([...seen]), currentUrl, currentOffset, status);
   let added = 0;
-  while (pending.length && seen.size < sitemapLimit && added < sitemapLimit) {
-    const sitemapUrl = pending.shift();
+  while ((currentUrl || pending.length) && seen.size < sitemapLimit && added < sitemapLimit) {
+    const sitemapUrl = currentUrl || pending.shift();
     if (seen.has(sitemapUrl)) continue;
-    seen.add(sitemapUrl);
+    currentUrl = sitemapUrl;
+    saveCursor();
     const xml = await fetchText(sitemapUrl);
-    if (!xml || /\/robots\.txt$/i.test(sitemapUrl)) continue;
+    if (!xml || /\/robots\.txt$/i.test(sitemapUrl)) {
+      seen.add(sitemapUrl); currentUrl = ''; currentOffset = 0; saveCursor(); continue;
+    }
     const parsed = extractXmlLinks(xml, sitemapUrl);
-    if (!parsed.valid) continue;
-    for (const url of parsed.links) {
+    if (!parsed.valid) {
+      seen.add(sitemapUrl); currentUrl = ''; currentOffset = 0; saveCursor(); continue;
+    }
+    for (let index = currentOffset; index < parsed.links.length; index += 1) {
+      const url = parsed.links[index];
       if (!sameHost(siteUrl, url)) continue;
       if (parsed.nested.includes(url)) pending.push(url);
       else if (addPage(siteId, url)) {
         added += 1;
         if (added % checkpointSize === 0) await persist();
       }
-      if (added >= sitemapLimit) break;
+      currentOffset = index + 1;
+      saveCursor();
+      if (added >= sitemapLimit) return { added, sitemaps: seen.size, truncated: true, current_url: currentUrl, current_offset: currentOffset };
     }
+    seen.add(sitemapUrl); currentUrl = ''; currentOffset = 0; saveCursor();
   }
-  return { added, sitemaps: seen.size, truncated: pending.length > 0 || seen.size >= sitemapLimit || added >= sitemapLimit };
+  const truncated = Boolean(currentUrl || pending.length || seen.size >= sitemapLimit || added >= sitemapLimit);
+  if (!truncated) saveCursor('completed');
+  return { added, sitemaps: seen.size, truncated, current_url: currentUrl, current_offset: currentOffset };
 }
 
 function indexableCandidate(url) {
