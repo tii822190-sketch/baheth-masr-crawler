@@ -149,7 +149,7 @@ async function discoverSitemaps(siteId, siteUrl, persist = async () => {}) {
       if (added >= sitemapLimit) break;
     }
   }
-  return { added, sitemaps: seen.size };
+  return { added, sitemaps: seen.size, truncated: pending.length > 0 || seen.size >= sitemapLimit || added >= sitemapLimit };
 }
 
 function indexableCandidate(url) {
@@ -178,7 +178,6 @@ function enqueue(siteId, url) {
 function addPage(siteId, url) {
   const canonical = canonicalize(url);
   if (!canonical || !allowed(canonical) || !indexableCandidate(canonical)) return false;
-  if (links.prepare('SELECT COUNT(*) AS count FROM site_pages WHERE site_id=?').get(siteId).count >= perSite) return false;
   try {
     const result = links.prepare(`
       INSERT OR IGNORE INTO site_pages (site_id,url,discovered_at,crawl_status)
@@ -270,9 +269,9 @@ for (const site of sites) {
     console.log(JSON.stringify({ checkpoint: checkpoints, processed, sites_scanned: sitesScanned, pages_queued: pagesQueued }));
     await syncCheckpoint();
   };
-  let sitemapResult = { added: 0, sitemaps: 0 };
+  let sitemapResult = { added: 0, sitemaps: 0, truncated: false };
   if (discoveryMode !== 'crawl_only') {
-    sitemapResult = await discoverSitemaps(site.id, site.url, persistBatch).catch(() => ({ added: 0, sitemaps: 0 }));
+    sitemapResult = await discoverSitemaps(site.id, site.url, persistBatch).catch(() => ({ added: 0, sitemaps: 0, truncated: true }));
     pagesQueued += sitemapResult.added;
     if (sitemapResult.sitemaps) console.log(JSON.stringify({ sitemap_first: true, mode: discoveryMode, site: site.url, sitemaps: sitemapResult.sitemaps, pages_from_sitemaps: sitemapResult.added }));
     if (!sitemapResult.added) {
@@ -281,8 +280,11 @@ for (const site of sites) {
       if (archiveAdded) console.log(JSON.stringify({ archive_fallback: true, mode: discoveryMode, site: site.url, pages_from_archive: archiveAdded }));
     }
   }
-  if (discoveryMode === 'sitemap_only' || pagesQueued >= runPageLimit) {
-    links.prepare("UPDATE sites SET discovery_status='completed', last_discovered_at=CURRENT_TIMESTAMP WHERE id=?").run(site.id);
+  const hitRunLimit = pagesQueued >= runPageLimit;
+  if (discoveryMode === 'sitemap_only' || hitRunLimit) {
+    const complete = discoveryMode === 'sitemap_only' && !sitemapResult.truncated && !hitRunLimit;
+    links.prepare("UPDATE sites SET discovery_status=?, last_discovered_at=CURRENT_TIMESTAMP WHERE id=?").run(complete ? 'completed' : 'processing', site.id);
+    console.log(JSON.stringify({ site: site.url, discovery_status: complete ? 'completed' : 'processing', sitemap_truncated: sitemapResult.truncated, hit_run_limit: hitRunLimit }));
     sitesScanned += 1;
     continue;
   }
