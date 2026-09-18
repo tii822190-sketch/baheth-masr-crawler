@@ -248,11 +248,12 @@ for (const seed of String(process.env.DISCOVERY_SEED_URLS || '').split('|').map(
   }
 }
 
+const syncSince = new Date().toISOString().slice(0, 19).replace('T', ' ');
 function syncCheckpoint() {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, ['tools/sync-turso-staging.mjs'], {
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: process.env,
+      env: { ...process.env, SYNC_TURSO_INCREMENTAL: '1', SYNC_TURSO_INCREMENTAL_SINCE: syncSince },
     });
     let stdout = '';
     let stderr = '';
