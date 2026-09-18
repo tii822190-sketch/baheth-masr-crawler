@@ -41,6 +41,8 @@ jobs:
       CRAWLER_CONCURRENCY: '10'
       CRAWLER_BROWSER_CONCURRENCY: '7'
       CRAWLER_BROWSER_BUDGET_MS: '15000'
+      CRAWLER_PAGE_TIMEOUT_MS: '300000'
+      CRAWLER_RETRIES: '2'
       CRAWLER_DRAIN_DISCOVERIES: '0'
       CRAWLER_ONE_BATCH: '1'
       CRAWLER_RETRY_FAILED: '0'
@@ -63,16 +65,25 @@ jobs:
         run: |
           set -e
           processed_pages=0
+          batch_number=0
+          started_at=$(date +%s)
           while [ "$processed_pages" -lt "$CRAWLER_MAX_PAGES" ]; do
+            batch_number=$((batch_number + 1))
             remaining=$((CRAWLER_MAX_PAGES - processed_pages))
             current_batch_size=$CRAWLER_BATCH_SIZE
             if [ "$current_batch_size" -gt "$remaining" ]; then current_batch_size=$remaining; fi
             export CRAWLER_BATCH_SIZE="$current_batch_size"
+            batch_started_at=$(date +%s)
+            echo "::notice::Starting batch ${batch_number}; batch_size=${current_batch_size}; processed=${processed_pages}/${CRAWLER_MAX_PAGES}; page_timeout=${CRAWLER_PAGE_TIMEOUT_MS}ms; request_concurrency=${CRAWLER_CONCURRENCY}; browser_concurrency=${CRAWLER_BROWSER_CONCURRENCY}"
+            node tools/turso-job-lock.mjs heartbeat
             output=$(node crawler/src/cli.mjs manual)
             echo "$output"
             export CRAWLER_SYNC_RUN_ID=$(node -e "const x=JSON.parse(process.argv[1]); console.log(Number(x.runId)||0)" "$output")
             processed=$(node -e "const x=JSON.parse(process.argv[1]); console.log(Number(x.total)||0)" "$output")
             processed_pages=$((processed_pages + processed))
+            batch_elapsed=$(( $(date +%s) - batch_started_at ))
+            total_elapsed=$(( $(date +%s) - started_at ))
+            echo "::notice::Finished batch ${batch_number}; batch_processed=${processed}; total_processed=${processed_pages}/${CRAWLER_MAX_PAGES}; batch_elapsed=${batch_elapsed}s; total_elapsed=${total_elapsed}s"
             if ! validation=$(node tools/validate-staging.mjs 2>&1); then
               echo "Validation completed with non-blocking row-level issues:"
               echo "$validation"
