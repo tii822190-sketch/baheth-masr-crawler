@@ -161,7 +161,10 @@ async function discoverSite(site) {
   return { site_id: site.id, site: site.url, status, sitemaps_scanned: sitemapCount, pages_added: pagesAdded, pages_total: totalPages, max_pages: MAX_PAGES_PER_SITE, more_pages_available: hasMore };
 }
 
-const site = db.prepare("SELECT id,url,crawl_status FROM sites WHERE crawl_status='pending' ORDER BY id LIMIT 1").get();
+const requestedSite = canonicalize(process.env.DISCOVERY_SITE_URL || '');
+const site = requestedSite
+  ? db.prepare("SELECT id,url,crawl_status FROM sites WHERE crawl_status='pending' AND (url=? OR url=? ) LIMIT 1").get(requestedSite, `${requestedSite}/`)
+  : db.prepare("SELECT id,url,crawl_status FROM sites WHERE crawl_status='pending' ORDER BY id LIMIT 1").get();
 if (!site) {
   console.log(JSON.stringify({ ok: true, message: 'no_pending_site', processed_sites: 0 }, null, 2));
   db.close();
