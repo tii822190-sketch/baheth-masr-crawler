@@ -20,7 +20,7 @@ function canonicalize(raw) {
     url.password = '';
     url.hostname = url.hostname.toLowerCase().replace(/^www\./, '');
     if ((url.protocol === 'https:' && url.port === '443') || (url.protocol === 'http:' && url.port === '80')) url.port = '';
-    url.pathname = url.pathname.replace(/\/index\.(?:html?|php)$/i, '/') || '/';
+    url.pathname = url.pathname.toLowerCase().replace(/\/index\.(?:html?|php)$/i, '/') || '/';
     if (url.pathname.length > 1) url.pathname = url.pathname.replace(/\/+$/, '');
     for (const key of [...url.searchParams.keys()]) url.searchParams.delete(key);
     return url.toString();
