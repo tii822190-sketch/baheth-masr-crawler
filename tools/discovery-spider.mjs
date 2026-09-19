@@ -1,388 +1,183 @@
-import { spawn } from 'node:child_process';
-import { gunzipSync } from 'node:zlib';
+import zlib from 'node:zlib';
 import Database from 'better-sqlite3';
-import { extractHtml } from '../crawler/src/extract.mjs';
-import { canonicalize } from '../crawler/src/db.mjs';
 
-const links = new Database(process.env.CRAWLER_INPUT_DB_PATH || 'db/links.sqlite');
-const timeoutMs = Number(process.env.DISCOVERY_TIMEOUT_MS || 20000);
-const perSite = Math.max(1, Number(process.env.DISCOVERY_MAX_PAGES_PER_SITE || 6000));
-const maxSites = Math.max(1, Number(process.env.DISCOVERY_MAX_SITES || 25));
-const checkpointSize = Math.max(1, Number(process.env.DISCOVERY_CHECKPOINT_SIZE || 1000));
-const maxAttempts = Math.max(1, Number(process.env.DISCOVERY_MAX_ATTEMPTS || 3));
-const browserBudgetMs = Math.max(1000, Number(process.env.DISCOVERY_BROWSER_BUDGET_MS || 12000));
-const registerExternalSites = process.env.DISCOVERY_REGISTER_EXTERNAL_SITES === '1';
-const runPageLimit = Math.max(1, Number(process.env.DISCOVERY_RUN_PAGE_LIMIT || 6000));
-const sitemapLimit = Math.min(runPageLimit, Math.max(1, Number(process.env.DISCOVERY_MAX_SITEMAP_URLS || 6000)));
-const archiveLimit = Math.min(runPageLimit, Math.max(1, Number(process.env.DISCOVERY_MAX_ARCHIVE_URLS || 6000)));
-const discoveryMode = ['sitemap_only', 'crawl_only', 'both'].includes(process.env.DISCOVERY_MODE) ? process.env.DISCOVERY_MODE : 'both';
-const allowedTlds = new Set(['eg', 'com', 'net', 'org', 'edu', 'gov', 'ai', 'jp']);
-const blocked = /\.(?:7z|apk|avi|bin|css|csv|docx?|exe|gif|iso|jpe?g|js|m3u8|mp3|mp4|pdf|png|pptx?|rar|svg|tar|webp|woff2?|xlsx?|zip)(?:$|[?#])/i;
+const DB_PATH = process.env.CRAWLER_DB_PATH || 'db/crawler.sqlite';
+const MAX_PAGES_PER_SITE = Math.max(1, Number(process.env.DISCOVERY_MAX_PAGES_PER_SITE || 10000));
+const REQUEST_TIMEOUT_MS = Math.max(1000, Number(process.env.DISCOVERY_TIMEOUT_MS || 20000));
+const MAX_SITEMAPS = Math.max(1, Number(process.env.DISCOVERY_MAX_SITEMAPS || 2000));
+const db = new Database(DB_PATH);
+db.pragma('foreign_keys = ON');
 
-function allowed(url) {
+const blockedFile = /\.(?:7z|apk|avi|bin|css|csv|doc|docx|exe|gif|gz|ico|iso|jpe?g|js|json|m3u8|m4a|mp3|mp4|pdf|png|ppt|pptx|rar|rss|svg|tar|txt|webp|woff2?|xls|xlsx|xml|zip)(?:$|[?#])/i;
+const blockedPath = /(?:^|\/)(?:admin|administrator|api|cart|checkout|comment|comments|feed|feeds|filter|login|logout|search|tag|tags|label|category|page|wp-admin|wp-json)(?:\/|$)/i;
+
+function canonicalize(raw) {
   try {
-    const u = new URL(url);
-    const decoded = decodeURIComponent(url);
-    if (!/^https?:$/.test(u.protocol) || blocked.test(u.pathname) || /^(mailto|tel|javascript):/i.test(url)) return false;
-    if (/[<>]|&lt;|&gt;|&quot;|\b(?:script|style|function|onclick)\b/i.test(decoded)) return false;
-    if (/\/feeds(?:\/|$)/i.test(u.pathname) || /comments\/default/i.test(u.pathname) || /(?:^|\/)(?:atom|rss)(?:\.xml)?$/i.test(u.pathname)) return false;
-    const labels = u.hostname.toLowerCase().split('.');
-    return labels.length >= 2 && allowedTlds.has(labels.at(-1));
-  } catch { return false; }
-}
-
-function extractXmlLinks(xml, baseUrl) {
-  const text = String(xml || '').replace(/^\uFEFF/, '').trim();
-  if (!text || /<\s*(?:!doctype\s+html|html\b)/i.test(text)) return { valid: false, links: [], nested: [] };
-  const root = text.match(/<\s*([a-z][\w:.-]*)\b/i)?.[1]?.toLowerCase() || '';
-  const isSitemap = root === 'urlset' || root === 'sitemapindex';
-  const isFeed = root === 'feed' || root === 'rss' || root === 'rdf:rdf';
-  if (!isSitemap && !isFeed) return { valid: false, links: [], nested: [] };
-  const links = [];
-  const add = (raw) => {
-    try {
-      const value = new URL(String(raw).trim(), baseUrl).toString();
-      if (allowed(value) && !links.includes(value)) links.push(value);
-    } catch {}
-  };
-  for (const match of text.matchAll(/<loc\b[^>]*>\s*([^<]+?)\s*<\/loc>/gi)) add(match[1]);
-  if (isFeed) {
-    for (const entry of text.matchAll(/<(?:entry|item)\b[\s\S]*?<\/((?:entry|item))>/gi)) {
-      for (const match of entry[0].matchAll(/<link\b[^>]*?\bhref\s*=\s*["']([^"']+)["'][^>]*>/gi)) add(match[1]);
-      for (const match of entry[0].matchAll(/<link\b[^>]*>([^<]+)<\/link>/gi)) add(match[1]);
-    }
+    const url = new URL(raw);
+    if (!['http:', 'https:'].includes(url.protocol)) return '';
+    url.hash = '';
+    url.username = '';
+    url.password = '';
+    url.hostname = url.hostname.toLowerCase().replace(/^www\./, '');
+    if ((url.protocol === 'https:' && url.port === '443') || (url.protocol === 'http:' && url.port === '80')) url.port = '';
+    url.pathname = url.pathname.replace(/\/index\.(?:html?|php)$/i, '/') || '/';
+    if (url.pathname.length > 1) url.pathname = url.pathname.replace(/\/+$/, '');
+    for (const key of [...url.searchParams.keys()]) url.searchParams.delete(key);
+    return url.toString();
+  } catch {
+    return '';
   }
-  const nested = links.filter((url) => /(?:sitemap(?:[-_].*)?|\.xml)(?:\.gz)?$/i.test(new URL(url).pathname));
-  return { valid: true, links, nested };
 }
 
 function sameHost(a, b) {
   try {
     return new URL(a).hostname.replace(/^www\./, '') === new URL(b).hostname.replace(/^www\./, '');
-  } catch { return false; }
+  } catch {
+    return false;
+  }
 }
 
-async function browserHtml(url) {
-  return await new Promise((resolve) => {
-    const child = spawn('/usr/bin/chromium', ['--headless=new', '--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage', `--virtual-time-budget=${browserBudgetMs}`, '--run-all-compositor-stages-before-draw', '--dump-dom', url], { stdio: ['ignore', 'pipe', 'ignore'] });
-    let body = '';
-    const timer = setTimeout(() => { child.kill('SIGKILL'); resolve(null); }, timeoutMs + browserBudgetMs);
-    child.stdout.on('data', (chunk) => { body += chunk; });
-    child.on('close', (code) => { clearTimeout(timer); resolve(code === 0 && body.trim() ? { url, body, type: 'text/html' } : null); });
-  });
+function isPageUrl(raw, siteUrl) {
+  const url = canonicalize(raw);
+  if (!url || !sameHost(url, siteUrl)) return '';
+  const parsed = new URL(url);
+  const path = parsed.pathname.toLowerCase();
+  if (parsed.search || parsed.hash || path === '/robots.txt' || blockedFile.test(path) || blockedPath.test(path)) return '';
+  if (/\/(?:sitemap(?:[-_].*)?|feed|rss|atom)(?:\.xml)?$/i.test(path)) return '';
+  if (/\/(?:search|find|query)(?:\/|$)/i.test(path)) return '';
+  if (/\/(?:page|p)\/\d+(?:\/|$)/i.test(path)) return '';
+  return url;
 }
 
-async function fetchHtml(url) {
+function sitemapUrl(raw, siteUrl) {
+  const url = canonicalize(raw);
+  if (!url || !sameHost(url, siteUrl)) return '';
+  const path = new URL(url).pathname.toLowerCase();
+  return /(?:sitemap|\.xml)(?:\.gz)?$/i.test(path) ? url : '';
+}
+
+async function fetchBytes(url) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
     const response = await fetch(url, {
       signal: controller.signal,
       redirect: 'follow',
-      headers: { 'user-agent': 'BahethMasrDiscovery/2.0 (+resumable-checkpoints)' },
+      headers: { 'user-agent': 'BahethMasrDiscovery/4.0 (+sitemap-only)' },
     });
-    const type = response.headers.get('content-type') || '';
-    if (!response.ok || !type.toLowerCase().includes('html')) return null;
-    const body = await response.text();
-    const meta = extractHtml(body, response.url || url, type);
-    if (meta.qualityStatus === 'dynamic_content' || meta.extractedText.length < 80) return (await browserHtml(response.url || url)) || { url: response.url || url, body, type };
-    return { url: response.url || url, body, type };
-  } catch { return null; }
-  finally { clearTimeout(timer); }
-}
-
-async function fetchText(url) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const response = await fetch(url, { signal: controller.signal, redirect: 'follow', headers: { 'user-agent': 'BahethMasrDiscovery/3.0 (+sitemap-first)' } });
-    if (!response.ok) return '';
+    if (!response.ok) return null;
     const bytes = Buffer.from(await response.arrayBuffer());
-    if (url.endsWith('.gz') || (bytes[0] === 0x1f && bytes[1] === 0x8b)) return gunzipSync(bytes).toString('utf8');
+    if (url.toLowerCase().endsWith('.gz') || (bytes[0] === 0x1f && bytes[1] === 0x8b)) return zlib.gunzipSync(bytes).toString('utf8');
     return bytes.toString('utf8');
-  } catch { return ''; }
-  finally { clearTimeout(timer); }
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
-async function discoverFromArchive(siteId, siteUrl, persist = async () => {}) {
-  const host = new URL(siteUrl).hostname;
-  const endpoint = `https://web.archive.org/cdx/search/cdx?url=${encodeURIComponent(`${host}/*`)}&output=txt&filter=statuscode:200&collapse=urlkey&fl=original&limit=${archiveLimit}`;
-  const body = await fetchText(endpoint);
-  let added = 0;
-  for (const raw of body.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)) {
-    let url;
-    try { url = new URL(raw.replace(/^\[?"|"\]?$/g, ''), siteUrl).toString(); } catch { continue; }
-    if (allowed(url) && sameHost(siteUrl, url) && addPage(siteId, url)) {
-      added += 1;
-      if (added % checkpointSize === 0) await persist();
-    }
-  }
-  return added;
-}
-
-async function discoverSitemaps(siteId, siteUrl, persist = async () => {}) {
-  const root = new URL(siteUrl);
-  const candidates = new Set([`${root.origin}/robots.txt`, `${root.origin}/sitemap.xml`, `${root.origin}/sitemap_index.xml`, `${root.origin}/sitemap-index.xml`, `${root.origin}/sitemap/sitemap.xml`, `${root.origin}/sitemap/sitemap-index.xml`, `${root.origin}/post-sitemap.xml`, `${root.origin}/page-sitemap.xml`, `${root.origin}/sitemap-pages.xml`]);
-  const robots = await fetchText(`${root.origin}/robots.txt`);
-  for (const line of robots.split(/\r?\n/)) {
-    const match = line.match(/^\s*sitemap\s*:\s*(\S+)/i);
-    if (match && allowed(match[1])) candidates.add(match[1]);
-  }
-  const existing = links.prepare('SELECT pending_urls,seen_urls,current_url,current_offset,status FROM discovery_sitemap_cursor WHERE site_id=?').get(siteId);
-  let pending = existing ? JSON.parse(existing.pending_urls || '[]') : [...candidates];
-  const seen = new Set(existing ? JSON.parse(existing.seen_urls || '[]') : []);
-  let currentUrl = existing?.current_url || '';
-  let currentOffset = Number(existing?.current_offset || 0);
-  const saveCursor = (status = 'processing') => links.prepare(`
-    INSERT INTO discovery_sitemap_cursor (site_id,pending_urls,seen_urls,current_url,current_offset,status,updated_at)
-    VALUES (?,?,?,?,?,?,CURRENT_TIMESTAMP)
-    ON CONFLICT(site_id) DO UPDATE SET pending_urls=excluded.pending_urls,seen_urls=excluded.seen_urls,current_url=excluded.current_url,current_offset=excluded.current_offset,status=excluded.status,updated_at=CURRENT_TIMESTAMP
-  `).run(siteId, JSON.stringify(pending), JSON.stringify([...seen]), currentUrl, currentOffset, status);
-  let added = 0;
-  while ((currentUrl || pending.length) && seen.size < sitemapLimit && added < sitemapLimit) {
-    const sitemapUrl = currentUrl || pending.shift();
-    if (seen.has(sitemapUrl)) continue;
-    currentUrl = sitemapUrl;
-    saveCursor();
-    const xml = await fetchText(sitemapUrl);
-    if (!xml || /\/robots\.txt$/i.test(sitemapUrl)) {
-      seen.add(sitemapUrl); currentUrl = ''; currentOffset = 0; saveCursor(); continue;
-    }
-    const parsed = extractXmlLinks(xml, sitemapUrl);
-    if (!parsed.valid) {
-      seen.add(sitemapUrl); currentUrl = ''; currentOffset = 0; saveCursor(); continue;
-    }
-    for (let index = currentOffset; index < parsed.links.length; index += 1) {
-      const url = parsed.links[index];
-      if (!sameHost(siteUrl, url)) continue;
-      if (parsed.nested.includes(url)) pending.push(url);
-      else if (addPage(siteId, url)) {
-        added += 1;
-        if (added % checkpointSize === 0) await persist();
+function xmlLinks(xml, baseUrl, siteUrl) {
+  const text = String(xml || '').replace(/^\uFEFF/, '').trim();
+  if (!text || /<\s*(?:!doctype\s+html|html\b)/i.test(text)) return { valid: false, pages: [], sitemaps: [] };
+  const root = text.match(/<\s*([a-z][\w:.-]*)\b/i)?.[1]?.toLowerCase() || '';
+  if (!['urlset', 'sitemapindex', 'feed', 'rss', 'rdf:rdf'].includes(root)) return { valid: false, pages: [], sitemaps: [] };
+  const pages = [];
+  const sitemaps = [];
+  const add = (raw) => {
+    try {
+      const url = new URL(String(raw).trim(), baseUrl).toString();
+      const nested = sitemapUrl(url, siteUrl);
+      if (nested && !sitemaps.includes(nested)) sitemaps.push(nested);
+      else {
+        const page = isPageUrl(url, siteUrl);
+        if (page && !pages.includes(page)) pages.push(page);
       }
-      currentOffset = index + 1;
-      saveCursor();
-      if (added >= sitemapLimit) return { added, sitemaps: seen.size, truncated: true, current_url: currentUrl, current_offset: currentOffset };
-    }
-    seen.add(sitemapUrl); currentUrl = ''; currentOffset = 0; saveCursor();
-  }
-  const truncated = Boolean(currentUrl || pending.length || seen.size >= sitemapLimit || added >= sitemapLimit);
-  if (!truncated) saveCursor('completed');
-  return { added, sitemaps: seen.size, truncated, current_url: currentUrl, current_offset: currentOffset };
-}
-
-function indexableCandidate(url) {
-  try {
-    const parsed = new URL(url);
-    const path = parsed.pathname.toLowerCase();
-    if (parsed.search) return false;
-    if (/^\/search(?:\/|$)/i.test(path) || /^\/label(?:\/|$)/i.test(path)) return false;
-    if (/^\/p\/(?:about|about-us|contact|contact-us|privacy|privacy-policy|terms|terms-of-service|blog-page|blog-page_\d+)/i.test(path)) return false;
-    return true;
-  } catch { return false; }
-}
-
-function enqueue(siteId, url) {
-  const canonical = canonicalize(url);
-  if (!canonical || !allowed(canonical) || !indexableCandidate(canonical)) return false;
-  try {
-    const result = links.prepare(`
-      INSERT OR IGNORE INTO discovery_queue (site_id,url,canonical_url,status)
-      VALUES (?,?,?,'pending')
-    `).run(siteId, canonical, canonical);
-    return result.changes > 0;
-  } catch { return false; }
-}
-
-function addPage(siteId, url) {
-  const canonical = canonicalize(url);
-  if (!canonical || !allowed(canonical) || !indexableCandidate(canonical)) return false;
-  try {
-    const result = links.prepare(`
-      INSERT OR IGNORE INTO site_pages (site_id,url,discovered_at,crawl_status)
-      VALUES (?,?,CURRENT_TIMESTAMP,'pending')
-    `).run(siteId, canonical);
-    return result.changes > 0;
-  } catch { return false; }
-}
-
-function addSite(url) {
-  const canonical = canonicalize(url);
-  if (!canonical || !allowed(canonical)) return null;
-  const parsed = new URL(canonical);
-  const root = `${parsed.protocol}//${parsed.host}/`;
-  const found = links.prepare('SELECT id FROM sites WHERE url=? OR url=?').get(root, canonical);
-  if (found) {
-    enqueue(found.id, canonical);
-    return found.id;
-  }
-  const siteId = links.prepare(`
-    INSERT INTO sites (url,name,status,priority,discovery_status,last_discovered_at)
-    VALUES (?,?, 'active',50,'pending',CURRENT_TIMESTAMP)
-  `).run(root, parsed.hostname).lastInsertRowid;
-  enqueue(siteId, root);
-  return siteId;
-}
-
-function markQueue(id, status, error = '', incrementAttempt = false) {
-  links.prepare(`
-    UPDATE discovery_queue
-    SET status=?, attempts=attempts + ?, last_attempt_at=CURRENT_TIMESTAMP,
-        last_error=?, updated_at=CURRENT_TIMESTAMP
-    WHERE id=?
-  `).run(status, incrementAttempt ? 1 : 0, error.slice(0, 1000), id);
-}
-
-function pendingForSite(siteId) {
-  return links.prepare(`
-    SELECT COUNT(*) AS count FROM discovery_queue
-    WHERE site_id=? AND status IN ('pending','processing','failed') AND attempts < ?
-  `).get(siteId, maxAttempts).count;
-}
-
-for (const seed of String(process.env.DISCOVERY_SEED_URLS || '').split('|').map((value) => value.trim()).filter(Boolean)) {
-  const siteId = addSite(seed);
-  if (siteId) {
-    links.prepare("UPDATE sites SET discovery_status='pending' WHERE id=?").run(siteId);
-    enqueue(siteId, seed);
-  }
-}
-
-const syncSince = new Date().toISOString().slice(0, 19).replace('T', ' ');
-function syncCheckpoint() {
-  return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, ['tools/sync-turso-staging.mjs'], {
-      stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, SYNC_TURSO_INCREMENTAL: '1', SYNC_TURSO_INCREMENTAL_SINCE: syncSince },
-    });
-    let stdout = '';
-    let stderr = '';
-    child.stdout.on('data', (chunk) => { stdout += chunk; process.stdout.write(chunk); });
-    child.stderr.on('data', (chunk) => { stderr += chunk; process.stderr.write(chunk); });
-    child.on('error', reject);
-    child.on('close', (code) => {
-      if (code === 0) resolve(stdout.trim());
-      else reject(new Error(`checkpoint_sync_failed_${code}: ${stderr.trim().slice(-500)}`));
-    });
-  });
-}
-
-const sites = links.prepare(`
-  SELECT id,url FROM sites
-  WHERE COALESCE(discovery_status,'active') IN ('pending','processing')
-     OR (COALESCE(discovery_status,'active')='active' AND last_discovered_at IS NULL)
-  ORDER BY COALESCE(last_discovered_at,'') ASC,id
-  LIMIT ?
-`).all(maxSites);
-
-let sitesScanned = 0;
-let pagesQueued = 0;
-let externalSites = 0;
-let processed = 0;
-let checkpoints = 0;
-let stoppedByCheckpoint = false;
-
-for (const site of sites) {
-  links.prepare("UPDATE sites SET discovery_status='processing' WHERE id=?").run(site.id);
-  const persistBatch = async () => {
-    checkpoints += 1;
-    console.log(JSON.stringify({ checkpoint: checkpoints, processed, sites_scanned: sitesScanned, pages_queued: pagesQueued }));
-    await syncCheckpoint();
+    } catch {}
   };
-  let sitemapResult = { added: 0, sitemaps: 0, truncated: false };
-  if (discoveryMode !== 'crawl_only') {
-    sitemapResult = await discoverSitemaps(site.id, site.url, persistBatch).catch(() => ({ added: 0, sitemaps: 0, truncated: true }));
-    pagesQueued += sitemapResult.added;
-    if (sitemapResult.sitemaps) console.log(JSON.stringify({ sitemap_first: true, mode: discoveryMode, site: site.url, sitemaps: sitemapResult.sitemaps, pages_from_sitemaps: sitemapResult.added }));
-    if (!sitemapResult.added) {
-      const archiveAdded = await discoverFromArchive(site.id, site.url, persistBatch).catch(() => 0);
-      pagesQueued += archiveAdded;
-      if (archiveAdded) console.log(JSON.stringify({ archive_fallback: true, mode: discoveryMode, site: site.url, pages_from_archive: archiveAdded }));
+  for (const match of text.matchAll(/<loc\b[^>]*>\s*([^<]+?)\s*<\/loc>/gi)) add(match[1]);
+  if (root === 'feed' || root === 'rss' || root === 'rdf:rdf') {
+    for (const entry of text.matchAll(/<(?:entry|item)\b[\s\S]*?<\/(?:entry|item)>/gi)) {
+      for (const match of entry[0].matchAll(/<link\b[^>]*\bhref\s*=\s*["']([^"']+)["']/gi)) add(match[1]);
+      for (const match of entry[0].matchAll(/<link\b[^>]*>\s*([^<]+)\s*<\/link>/gi)) add(match[1]);
     }
   }
-  const hitRunLimit = pagesQueued >= runPageLimit;
-  if (discoveryMode === 'sitemap_only' || hitRunLimit) {
-    const complete = discoveryMode === 'sitemap_only' && !sitemapResult.truncated && !hitRunLimit;
-    links.prepare("UPDATE sites SET discovery_status=?, last_discovered_at=CURRENT_TIMESTAMP WHERE id=?").run(complete ? 'completed' : 'processing', site.id);
-    console.log(JSON.stringify({ site: site.url, discovery_status: complete ? 'completed' : 'processing', sitemap_truncated: sitemapResult.truncated, hit_run_limit: hitRunLimit }));
-    sitesScanned += 1;
-    continue;
+  return { valid: true, pages, sitemaps };
+}
+
+function sitemapCandidates(siteUrl) {
+  const root = new URL(siteUrl);
+  const origin = root.origin;
+  return new Set([
+    `${origin}/sitemap.xml`, `${origin}/sitemap_index.xml`, `${origin}/sitemap-index.xml`,
+    `${origin}/sitemap/sitemap.xml`, `${origin}/sitemap/sitemap-index.xml`,
+    `${origin}/post-sitemap.xml`, `${origin}/page-sitemap.xml`, `${origin}/sitemap-pages.xml`,
+  ]);
+}
+
+async function discoverSite(site) {
+  const existing = db.prepare('SELECT COUNT(*) AS count FROM pages_queue WHERE site_id=?').get(site.id).count;
+  const queued = new Set();
+  const insertPage = db.prepare('INSERT OR IGNORE INTO pages_queue (site_id,url,indexed) VALUES (?,? ,0)');
+  let pagesAdded = 0;
+  let hasMore = false;
+  let sitemapCount = 0;
+  const seenSitemaps = new Set();
+  const pendingSitemaps = [...sitemapCandidates(site.url)];
+  const robots = await fetchBytes(`${new URL(site.url).origin}/robots.txt`);
+  for (const line of String(robots || '').split(/\r?\n/)) {
+    const match = line.match(/^\s*sitemap\s*:\s*(\S+)/i);
+    if (match) {
+      const candidate = sitemapUrl(match[1], site.url);
+      if (candidate) pendingSitemaps.push(candidate);
+    }
   }
-  if (!links.prepare('SELECT 1 FROM discovery_queue WHERE site_id=? LIMIT 1').get(site.id)) enqueue(site.id, site.url);
 
-  let siteProcessed = 0;
-  while (siteProcessed < Math.min(perSite, Math.max(0, runPageLimit - pagesQueued))) {
-    const item = links.prepare(`
-      SELECT id,url FROM discovery_queue
-      WHERE site_id=? AND status IN ('pending','processing','failed') AND attempts < ?
-      ORDER BY CASE status WHEN 'processing' THEN 0 WHEN 'pending' THEN 1 ELSE 2 END, id LIMIT 1
-    `).get(site.id, maxAttempts);
-    if (!item) break;
-
-    markQueue(item.id, 'processing', '', true);
-    const response = await fetchHtml(item.url);
-    if (!response) {
-      markQueue(item.id, 'failed', 'fetch_failed_or_non_html');
-    } else {
-      const meta = extractHtml(response.body, response.url, response.type);
-      if (sameHost(site.url, response.url)) {
-        if (addPage(site.id, response.url)) {
-          pagesQueued += 1;
-          if (pagesQueued % checkpointSize === 0) await persistBatch();
-        }
-        for (const link of meta.internalLinks) {
-          const normalized = canonicalize(link);
-          if (normalized && sameHost(site.url, normalized)) enqueue(site.id, normalized);
-        }
-        for (const link of registerExternalSites ? meta.externalLinks : []) {
-          const normalized = canonicalize(link);
-          if (!normalized || !allowed(normalized)) continue;
-          const newSite = addSite(normalized);
-          if (newSite && newSite !== site.id) {
-            externalSites += 1;
-            if (addPage(newSite, normalized)) pagesQueued += 1;
-          }
-        }
+  while (pendingSitemaps.length && seenSitemaps.size < MAX_SITEMAPS) {
+    const sitemap = pendingSitemaps.shift();
+    if (seenSitemaps.has(sitemap)) continue;
+    seenSitemaps.add(sitemap);
+    sitemapCount += 1;
+    const xml = await fetchBytes(sitemap);
+    const parsed = xmlLinks(xml, sitemap, site.url);
+    if (!parsed.valid) continue;
+    for (const nested of parsed.sitemaps) if (!seenSitemaps.has(nested) && !pendingSitemaps.includes(nested)) pendingSitemaps.push(nested);
+    for (const page of parsed.pages) {
+      if (queued.has(page)) continue;
+      queued.add(page);
+      const totalBefore = existing + pagesAdded;
+      if (totalBefore >= MAX_PAGES_PER_SITE) {
+        hasMore = true;
+        break;
       }
-      markQueue(item.id, 'completed');
+      const result = insertPage.run(site.id, page);
+      if (result.changes) pagesAdded += 1;
     }
-
-    siteProcessed += 1;
-    processed += 1;
-    if (processed % checkpointSize === 0) {
-      checkpoints += 1;
-      console.log(JSON.stringify({ checkpoint: checkpoints, processed, sites_scanned: sitesScanned, pages_queued: pagesQueued }));
-      await syncCheckpoint();
-      stoppedByCheckpoint = true;
-      break;
-    }
+    if (hasMore) break;
   }
-
-  const remaining = pendingForSite(site.id);
-  links.prepare(`
-    UPDATE sites
-    SET discovery_status=?, last_discovered_at=CURRENT_TIMESTAMP
-    WHERE id=?
-  `).run(remaining > 0 ? 'processing' : 'completed', site.id);
-  sitesScanned += 1;
-  if (stoppedByCheckpoint) break;
+  if (!hasMore && (pendingSitemaps.length || seenSitemaps.size >= MAX_SITEMAPS)) hasMore = true;
+  const totalPages = existing + pagesAdded;
+  const status = hasMore ? 'incomplete' : 'completed';
+  db.prepare('UPDATE sites SET crawl_status=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(status, site.id);
+  return { site_id: site.id, site: site.url, status, sitemaps_scanned: sitemapCount, pages_added: pagesAdded, pages_total: totalPages, max_pages: MAX_PAGES_PER_SITE, more_pages_available: hasMore };
 }
 
-if (processed > 0 && processed % checkpointSize !== 0) {
-  checkpoints += 1;
-  console.log(JSON.stringify({ checkpoint: checkpoints, processed, sites_scanned: sitesScanned, pages_queued: pagesQueued }));
-  await syncCheckpoint();
+const site = db.prepare("SELECT id,url,crawl_status FROM sites WHERE crawl_status='pending' ORDER BY id LIMIT 1").get();
+if (!site) {
+  console.log(JSON.stringify({ ok: true, message: 'no_pending_site', processed_sites: 0 }, null, 2));
+  db.close();
+  process.exit(0);
 }
 
-console.log(JSON.stringify({
-  ok: true,
-  sites_scanned: sitesScanned,
-  pages_processed: processed,
-  pages_queued: pagesQueued,
-  external_sites_registered: externalSites,
-  checkpoints,
-  resumable: true,
-  stopped_at_checkpoint: stoppedByCheckpoint,
-  discovery_only: true,
-}, null, 2));
-links.close();
+db.prepare("UPDATE sites SET crawl_status='processing',updated_at=CURRENT_TIMESTAMP WHERE id=?").run(site.id);
+try {
+  const result = await discoverSite(site);
+  console.log(JSON.stringify({ ok: true, processed_sites: 1, ...result }, null, 2));
+} catch (error) {
+  db.prepare("UPDATE sites SET crawl_status='failed',updated_at=CURRENT_TIMESTAMP WHERE id=?").run(site.id);
+  console.error(JSON.stringify({ ok: false, site_id: site.id, site: site.url, error: String(error) }, null, 2));
+  process.exitCode = 1;
+} finally {
+  db.close();
+}
+
+export { canonicalize, isPageUrl, xmlLinks };
