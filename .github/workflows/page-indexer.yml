@@ -7,11 +7,11 @@ on:
       batch_size:
         description: Pages per batch
         required: false
-        default: '50'
+        default: '20'
       max_pages:
         description: Maximum pages per run
         required: false
-        default: '500'
+        default: '20'
       sync_production:
         description: Sync approved rows to production after validation
         required: false
