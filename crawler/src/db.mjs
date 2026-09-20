@@ -48,8 +48,53 @@ function createCoreTables() {
   if (!columns('sites').includes('discovery_cursor')) db.exec('ALTER TABLE sites ADD COLUMN discovery_cursor TEXT');
 }
 
+function ensureSiteStatusConstraint() {
+  const schema = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='sites'").get()?.sql || '';
+  if (schema.includes("'not_pages'") && schema.includes("'error'")) return;
+
+  // Existing SQLite tables keep their original CHECK constraint after a
+  // CREATE IF NOT EXISTS. Rebuild both related tables so old databases can
+  // accept the backup spider's terminal statuses without breaking the FK.
+  db.pragma('foreign_keys = OFF');
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    db.exec('CREATE TABLE sites_data_backup AS SELECT * FROM sites');
+    db.exec('CREATE TABLE site_pages_data_backup AS SELECT * FROM site_pages');
+    db.exec('DROP TABLE site_pages');
+    db.exec('ALTER TABLE sites RENAME TO sites_old_status_constraint');
+    db.exec(`CREATE TABLE sites (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      url TEXT NOT NULL UNIQUE,
+      crawl_status TEXT NOT NULL DEFAULT 'pending' CHECK (crawl_status IN ('pending','not_pages','processing','completed','incomplete','failed','error')),
+      discovery_cursor TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`);
+    db.exec('INSERT INTO sites (id,url,crawl_status,discovery_cursor,created_at,updated_at) SELECT id,url,crawl_status,discovery_cursor,created_at,updated_at FROM sites_data_backup');
+    db.exec('DROP TABLE sites_old_status_constraint');
+    db.exec(`CREATE TABLE site_pages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+      url TEXT NOT NULL UNIQUE,
+      crawl_status TEXT NOT NULL DEFAULT 'pending',
+      crawl_attempts INTEGER NOT NULL DEFAULT 0
+    )`);
+    db.exec('INSERT INTO site_pages (id,site_id,url,crawl_status,crawl_attempts) SELECT id,site_id,url,crawl_status,crawl_attempts FROM site_pages_data_backup');
+    db.exec('DROP TABLE sites_data_backup');
+    db.exec('DROP TABLE site_pages_data_backup');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_site_pages_status ON site_pages(crawl_status,id); CREATE INDEX IF NOT EXISTS idx_site_pages_site ON site_pages(site_id,id)');
+    db.exec('COMMIT');
+  } catch (error) {
+    try { db.exec('ROLLBACK'); } catch {}
+    throw error;
+  } finally {
+    db.pragma('foreign_keys = ON');
+  }
+}
+
 export function initDb() {
   createCoreTables();
+  ensureSiteStatusConstraint();
   const integrity = db.prepare('PRAGMA integrity_check').get().integrity_check;
   if (integrity !== 'ok') throw new Error(`Database integrity check failed: ${integrity}`);
 }
