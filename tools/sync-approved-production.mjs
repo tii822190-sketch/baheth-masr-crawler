@@ -1,3 +1,5 @@
+import taxonomy from '../taxonomy/search-taxonomy.json' with { type: 'json' };
+
 const stagingUrl = process.env.TURSO_CRAWLER_DATABASE_URL;
 const stagingToken = process.env.TURSO_CRAWLER_AUTH_TOKEN;
 const productionUrl = process.env.TURSO_PRODUCTION_DATABASE_URL;
@@ -29,9 +31,11 @@ if (!rows.length) {
   process.exit(0);
 }
 const categoryPriority = (category) => ({ quran: 95, religion: 90, government: 85, education: 80, health: 75, hospital: 75, healthcare: 75, news: 65, other: 50 }[String(category || 'other').toLowerCase()] || 50);
+const categoryLabel = (category) => taxonomy.categories.find((item) => item.id === String(category || 'other'))?.name_ar || 'أخرى';
 const rootUrl = new URL(rows[0].canonical_url).origin + '/';
 const rootRow = rows.find((row) => row.canonical_url === rootUrl) || rows[0];
 const rootCategory = rootRow.category_candidate || 'other';
+  const rootCategoryLabel = categoryLabel(rootCategory);
 const rootKeywords = rootRow.subcategory_candidates_json || '[]';
 const priority = categoryPriority(rootCategory);
 const rootName = rootRow.title || rootUrl;
@@ -41,7 +45,7 @@ if (replaceRoot) {
   requests.push({ type: 'execute', stmt: { sql: `DELETE FROM site_search_fts WHERE site_id=(SELECT id FROM sites WHERE canonical_url=?)`, args: [arg('text', rootUrl)] } });
   requests.push({ type: 'execute', stmt: { sql: `DELETE FROM site_pages WHERE site_id=(SELECT id FROM sites WHERE canonical_url=?)`, args: [arg('text', rootUrl)] } });
 }
-requests.push({ type: 'execute', stmt: { sql: `INSERT OR IGNORE INTO sites (name,url,canonical_url,description,icon_url,keywords,categories,priority,search_text,status,last_verified_at,failed_attempts,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,'active',CURRENT_TIMESTAMP,0,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`, args: [arg('text', rootName), arg('text', rootUrl), arg('text', rootUrl), arg('text', rootDescription), arg('text', rootRow.icon_url || ''), arg('text', rootKeywords), arg('text', rootCategory), arg('integer', priority), arg('text', rootRow.search_text || '')] } });
+requests.push({ type: 'execute', stmt: { sql: `INSERT OR IGNORE INTO sites (name,url,canonical_url,description,icon_url,keywords,categories,priority,search_text,status,last_verified_at,failed_attempts,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,'active',CURRENT_TIMESTAMP,0,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`, args: [arg('text', rootName), arg('text', rootUrl), arg('text', rootUrl), arg('text', rootDescription), arg('text', rootRow.icon_url || ''), arg('text', rootKeywords), arg('text', rootCategoryLabel), arg('integer', priority), arg('text', rootRow.search_text || '')] } });
 for (const row of rows) {
   const canonical = row.canonical_url || row.requested_url;
   const title = row.title || canonical;
@@ -49,16 +53,17 @@ for (const row of rows) {
   const content = row.extracted_text || '';
   const searchText = row.search_text || `${title} ${description} ${content}`;
   const category = row.category_candidate || 'other';
+  const categoryName = categoryLabel(category);
   const keywords = row.subcategory_candidates_json || '[]';
   const rowPriority = categoryPriority(category) + (Number(row.classification_confidence || 0) >= 0.85 ? 5 : 0);
-  const common = [arg('text', row.requested_url || canonical), arg('text', canonical), arg('text', title), arg('text', description), arg('text', content), arg('text', keywords), arg('text', category), arg('text', row.icon_url || ''), arg('text', searchText), arg('integer', rowPriority), arg('integer', row.http_status || 200), arg('text', row.content_hash || '')];
+  const common = [arg('text', row.requested_url || canonical), arg('text', canonical), arg('text', title), arg('text', description), arg('text', content), arg('text', keywords), arg('text', categoryName), arg('text', row.icon_url || ''), arg('text', searchText), arg('integer', rowPriority), arg('integer', row.http_status || 200), arg('text', row.content_hash || '')];
   requests.push({ type: 'execute', stmt: { sql: `INSERT OR IGNORE INTO site_pages (site_id,url,canonical_url,title,description,content,keywords,categories,icon_url,search_text,priority,status,http_status,crawl_status,content_hash,last_crawled_at,created_at,updated_at) VALUES ((SELECT id FROM sites WHERE canonical_url=?),?,?,?,?,?,?,?,?,?,?,'active',?,'crawled',?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`, args: [arg('text', rootUrl), ...common] } });
-  requests.push({ type: 'execute', stmt: { sql: `UPDATE site_pages SET title=?,description=?,content=?,keywords=?,categories=?,icon_url=?,search_text=?,priority=?,status='active',http_status=?,crawl_status='crawled',content_hash=?,last_crawled_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE canonical_url=? OR url=?`, args: [arg('text', title), arg('text', description), arg('text', content), arg('text', keywords), arg('text', category), arg('text', row.icon_url || ''), arg('text', searchText), arg('integer', rowPriority), arg('integer', row.http_status || 200), arg('text', row.content_hash || ''), arg('text', canonical), arg('text', row.requested_url || canonical)] } });
+  requests.push({ type: 'execute', stmt: { sql: `UPDATE site_pages SET title=?,description=?,content=?,keywords=?,categories=?,icon_url=?,search_text=?,priority=?,status='active',http_status=?,crawl_status='crawled',content_hash=?,last_crawled_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE canonical_url=? OR url=?`, args: [arg('text', title), arg('text', description), arg('text', content), arg('text', keywords), arg('text', categoryName), arg('text', row.icon_url || ''), arg('text', searchText), arg('integer', rowPriority), arg('integer', row.http_status || 200), arg('text', row.content_hash || ''), arg('text', canonical), arg('text', row.requested_url || canonical)] } });
   if (canonical === rootUrl) continue;
   requests.push({ type: 'execute', stmt: { sql: `DELETE FROM site_search_fts WHERE record_type='page' AND record_id IN (SELECT CAST(id AS TEXT) FROM site_pages WHERE canonical_url=? OR url=?)`, args: [arg('text', canonical), arg('text', row.requested_url || canonical)] } });
   requests.push({ type: 'execute', stmt: { sql: `INSERT INTO site_search_fts (record_type,record_id,site_id,priority,title,description,content,keywords,categories,search_text) SELECT 'page',printf('%d',id),site_id,priority,title,description,content,keywords,categories,search_text FROM site_pages WHERE canonical_url=?`, args: [arg('text', canonical)] } });
 }
-requests.push({ type: 'execute', stmt: { sql: `UPDATE sites SET description=?,icon_url=?,keywords=?,categories=?,priority=?,search_text=?,updated_at=CURRENT_TIMESTAMP WHERE canonical_url=?`, args: [arg('text', rootDescription), arg('text', rootRow.icon_url || ''), arg('text', rootKeywords), arg('text', rootCategory), arg('integer', priority), arg('text', rootRow.search_text || ''), arg('text', rootUrl)] } });
+requests.push({ type: 'execute', stmt: { sql: `UPDATE sites SET description=?,icon_url=?,keywords=?,categories=?,priority=?,search_text=?,updated_at=CURRENT_TIMESTAMP WHERE canonical_url=?`, args: [arg('text', rootDescription), arg('text', rootRow.icon_url || ''), arg('text', rootKeywords), arg('text', rootCategoryLabel), arg('integer', priority), arg('text', rootRow.search_text || ''), arg('text', rootUrl)] } });
 requests.push({ type: 'execute', stmt: { sql: `SELECT COUNT(DISTINCT canonical_url) AS pages FROM site_pages WHERE site_id=(SELECT id FROM sites WHERE canonical_url=?) AND status='active'`, args: [arg('text', rootUrl)] } });
 requests.push({ type: 'execute', stmt: { sql: `SELECT COUNT(DISTINCT record_type || ':' || record_id) AS fts FROM site_search_fts WHERE site_id=(SELECT id FROM sites WHERE canonical_url=?)`, args: [arg('text', rootUrl)] } });
 const output = await pipeline(productionUrl, productionToken, requests, 'production');

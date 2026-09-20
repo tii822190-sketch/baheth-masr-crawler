@@ -3,21 +3,803 @@
   "source_of_truth": "baheth-masr/taxonomy/search-taxonomy.json",
   "default_category": "other",
   "categories": [
-    {"id":"quran","name_ar":"القرآن الكريم","name_en":"Quran","keywords_ar":["قرآن","القرآن","مصحف","تلاوة","سورة","آية"],"subcategories":[{"id":"quran_reading","name_ar":"قراءة القرآن","keywords_ar":["قراءة","مصحف إلكتروني","سور"]},{"id":"quran_tafsir","name_ar":"تفسير القرآن","keywords_ar":["تفسير","معاني الآيات","علوم القرآن"]},{"id":"quran_audio","name_ar":"تلاوات صوتية","keywords_ar":["تلاوة","قارئ","صوت","استماع"]},{"id":"quran_download","name_ar":"تحميل القرآن","keywords_ar":["تحميل","تنزيل","رابط تحميل"]},{"id":"quran_translation","name_ar":"ترجمة معاني القرآن","keywords_ar":["ترجمة","معاني القرآن","لغات"]}]},
-    {"id":"books","name_ar":"كتب ومكتبات","name_en":"Books and Libraries","keywords_ar":["كتب","كتاب","مكتبة","قراءة","روايات"],"subcategories":[{"id":"books_scientific","name_ar":"كتب علمية","keywords_ar":["علمي","علوم","مراجع"]},{"id":"books_educational","name_ar":"كتب دراسية","keywords_ar":["دراسي","مناهج","مذكرات"]},{"id":"books_religious","name_ar":"كتب دينية","keywords_ar":["إسلامية","دينية","فقه"]},{"id":"books_children","name_ar":"كتب أطفال","keywords_ar":["أطفال","قصص أطفال"]},{"id":"digital_library","name_ar":"مكتبات رقمية","keywords_ar":["مكتبة رقمية","كتب إلكترونية","قراءة أونلاين"]}]},
-    {"id":"education","name_ar":"التعليم","name_en":"Education","keywords_ar":["تعليم","دراسة","طلاب","تعلم","منهج"],"subcategories":[{"id":"university","name_ar":"جامعات وكليات","keywords_ar":["جامعة","كلية","معهد","بحث جامعي"]},{"id":"school","name_ar":"مدارس","keywords_ar":["مدرسة","مدارس","تعليم أساسي"]},{"id":"courses","name_ar":"دورات ومنصات تعليمية","keywords_ar":["كورس","دورة","منصة تعليمية","تدريب"]},{"id":"research","name_ar":"أبحاث علمية","keywords_ar":["بحث علمي","مجلة علمية","دراسة"]}]},
-    {"id":"health","name_ar":"الصحة والطب","name_en":"Health and Medicine","keywords_ar":["صحة","طب","طبيب","مستشفى","عيادة","صيدلية"],"subcategories":[{"id":"hospital","name_ar":"مستشفيات","keywords_ar":["مستشفى","مستشفيات"]},{"id":"clinic","name_ar":"عيادات وأطباء","keywords_ar":["عيادة","دكتور","طبيب"]},{"id":"pharmacy","name_ar":"صيدليات","keywords_ar":["صيدلية","دواء","أدوية"]},{"id":"laboratory","name_ar":"معامل وتحاليل","keywords_ar":["معمل","تحاليل","أشعة"]}]},
-    {"id":"government","name_ar":"حكومة وخدمات عامة","name_en":"Government and Public Services","keywords_ar":["حكومة","حكومي","وزارة","محافظة","خدمات حكومية"],"subcategories":[{"id":"government_services","name_ar":"خدمات حكومية","keywords_ar":["خدمة حكومية","استخراج","استعلام"]},{"id":"ministries","name_ar":"وزارات وهيئات","keywords_ar":["وزارة","هيئة","مصلحة"]},{"id":"governorates","name_ar":"محافظات ومدن","keywords_ar":["محافظة","مدينة","حي"]}]},
-    {"id":"news","name_ar":"أخبار وصحافة","name_en":"News and Journalism","keywords_ar":["أخبار","صحافة","خبر","جريدة","سياسة"],"subcategories":[{"id":"local_news","name_ar":"أخبار محلية","keywords_ar":["مصر","محلي","محافظة"]},{"id":"business_news","name_ar":"أخبار اقتصادية","keywords_ar":["اقتصاد","بورصة","أعمال"]},{"id":"sports_news","name_ar":"أخبار رياضية","keywords_ar":["رياضة","كرة","مباريات"]}]},
-    {"id":"business","name_ar":"شركات وأعمال","name_en":"Business and Companies","keywords_ar":["شركة","أعمال","تجارة","مؤسسة","خدمات تجارية"],"subcategories":[{"id":"technology_business","name_ar":"شركات تقنية","keywords_ar":["برمجة","تكنولوجيا","سوفت وير"]},{"id":"commerce","name_ar":"تجارة ومتاجر","keywords_ar":["متجر","شراء","بيع","تسوق"]},{"id":"startups","name_ar":"شركات ناشئة","keywords_ar":["شركة ناشئة","ريادة أعمال"]}]},
-    {"id":"jobs","name_ar":"وظائف وتوظيف","name_en":"Jobs and Careers","keywords_ar":["وظائف","عمل","توظيف","وظيفة","سيرة ذاتية"],"subcategories":[{"id":"job_listings","name_ar":"إعلانات وظائف","keywords_ar":["وظائف شاغرة","فرص عمل"]},{"id":"career_services","name_ar":"خدمات مهنية","keywords_ar":["تدريب مهني","تطوير مهني"]}]},
-    {"id":"technology","name_ar":"تقنية وبرمجة","name_en":"Technology","keywords_ar":["تقنية","تكنولوجيا","برمجة","إنترنت","ذكاء اصطناعي"],"subcategories":[{"id":"software","name_ar":"برمجيات وتطبيقات","keywords_ar":["برنامج","تطبيق","منصة"]},{"id":"programming","name_ar":"برمجة وتطوير","keywords_ar":["كود","تطوير ويب","لغة برمجة"]}]},
-    {"id":"culture","name_ar":"ثقافة وفنون","name_en":"Culture and Arts","keywords_ar":["ثقافة","فن","موسيقى","مسرح","سينما","تراث"],"subcategories":[{"id":"arts","name_ar":"فنون","keywords_ar":["فن","رسم","موسيقى"]},{"id":"heritage","name_ar":"تراث وآثار","keywords_ar":["تراث","آثار","تاريخ"]}]},
-    {"id":"sports","name_ar":"رياضة","name_en":"Sports","keywords_ar":["رياضة","كرة القدم","نادي","بطولة","مباريات"],"subcategories":[]},
-    {"id":"tourism","name_ar":"سياحة وسفر","name_en":"Tourism and Travel","keywords_ar":["سياحة","سفر","فنادق","رحلات","أماكن سياحية"],"subcategories":[]},
-    {"id":"services","name_ar":"خدمات","name_en":"Services","keywords_ar":["خدمات","دليل","مواعيد","حجز","استعلام"],"subcategories":[]},
-    {"id":"media","name_ar":"إعلام وفيديو","name_en":"Media and Video","keywords_ar":["فيديو","قناة","يوتيوب","إعلام","بودكاست"],"subcategories":[]},
-    {"id":"other","name_ar":"أخرى","name_en":"Other","keywords_ar":[],"subcategories":[]}
+    {
+      "id": "quran",
+      "name_ar": "القرآن الكريم",
+      "name_en": "Quran",
+      "keywords_ar": [
+        "قرآن",
+        "القرآن",
+        "مصحف",
+        "تلاوة",
+        "سورة",
+        "آية"
+      ],
+      "subcategories": [
+        {
+          "id": "quran_reading",
+          "name_ar": "قراءة القرآن",
+          "keywords_ar": [
+            "قراءة",
+            "مصحف إلكتروني",
+            "سور"
+          ],
+          "keywords_en": [
+            "quran reading",
+            "read quran",
+            "online quran"
+          ]
+        },
+        {
+          "id": "quran_tafsir",
+          "name_ar": "تفسير القرآن",
+          "keywords_ar": [
+            "تفسير",
+            "معاني الآيات",
+            "علوم القرآن"
+          ],
+          "keywords_en": [
+            "quran tafsir",
+            "quran commentary",
+            "interpretation"
+          ]
+        },
+        {
+          "id": "quran_audio",
+          "name_ar": "تلاوات صوتية",
+          "keywords_ar": [
+            "تلاوة",
+            "قارئ",
+            "صوت",
+            "استماع"
+          ],
+          "keywords_en": [
+            "quran audio",
+            "quran recitation",
+            "listen quran"
+          ]
+        },
+        {
+          "id": "quran_download",
+          "name_ar": "تحميل القرآن",
+          "keywords_ar": [
+            "تحميل",
+            "تنزيل",
+            "رابط تحميل"
+          ],
+          "keywords_en": [
+            "quran download",
+            "download quran",
+            "mp3 quran"
+          ]
+        },
+        {
+          "id": "quran_translation",
+          "name_ar": "ترجمة معاني القرآن",
+          "keywords_ar": [
+            "ترجمة",
+            "معاني القرآن",
+            "لغات"
+          ],
+          "keywords_en": [
+            "quran translation",
+            "quran translations"
+          ]
+        }
+      ],
+      "keywords_en": [
+        "quran",
+        "koran",
+        "holy book",
+        "recitation",
+        "tafsir",
+        "surah",
+        "ayah"
+      ]
+    },
+    {
+      "id": "books",
+      "name_ar": "كتب ومكتبات",
+      "name_en": "Books and Libraries",
+      "keywords_ar": [
+        "كتب",
+        "كتاب",
+        "مكتبة",
+        "قراءة",
+        "روايات"
+      ],
+      "subcategories": [
+        {
+          "id": "books_scientific",
+          "name_ar": "كتب علمية",
+          "keywords_ar": [
+            "علمي",
+            "علوم",
+            "مراجع"
+          ],
+          "keywords_en": [
+            "scientific books",
+            "science books"
+          ]
+        },
+        {
+          "id": "books_educational",
+          "name_ar": "كتب دراسية",
+          "keywords_ar": [
+            "دراسي",
+            "مناهج",
+            "مذكرات"
+          ],
+          "keywords_en": [
+            "educational books",
+            "textbooks"
+          ]
+        },
+        {
+          "id": "books_religious",
+          "name_ar": "كتب دينية",
+          "keywords_ar": [
+            "إسلامية",
+            "دينية",
+            "فقه"
+          ],
+          "keywords_en": [
+            "religious books"
+          ]
+        },
+        {
+          "id": "books_children",
+          "name_ar": "كتب أطفال",
+          "keywords_ar": [
+            "أطفال",
+            "قصص أطفال"
+          ],
+          "keywords_en": [
+            "children books",
+            "kids books"
+          ]
+        },
+        {
+          "id": "digital_library",
+          "name_ar": "مكتبات رقمية",
+          "keywords_ar": [
+            "مكتبة رقمية",
+            "كتب إلكترونية",
+            "قراءة أونلاين"
+          ],
+          "keywords_en": [
+            "digital library",
+            "ebooks",
+            "electronic books"
+          ]
+        }
+      ],
+      "keywords_en": [
+        "book",
+        "books",
+        "library",
+        "libraries",
+        "novel",
+        "reading"
+      ]
+    },
+    {
+      "id": "education",
+      "name_ar": "التعليم",
+      "name_en": "Education",
+      "keywords_ar": [
+        "تعليم",
+        "دراسة",
+        "طلاب",
+        "تعلم",
+        "منهج"
+      ],
+      "subcategories": [
+        {
+          "id": "university",
+          "name_ar": "جامعات وكليات",
+          "keywords_ar": [
+            "جامعة",
+            "كلية",
+            "معهد",
+            "بحث جامعي"
+          ],
+          "keywords_en": [
+            "university",
+            "college",
+            "higher education"
+          ]
+        },
+        {
+          "id": "school",
+          "name_ar": "مدارس",
+          "keywords_ar": [
+            "مدرسة",
+            "مدارس",
+            "تعليم أساسي"
+          ],
+          "keywords_en": [
+            "school",
+            "schools",
+            "primary education"
+          ]
+        },
+        {
+          "id": "courses",
+          "name_ar": "دورات ومنصات تعليمية",
+          "keywords_ar": [
+            "كورس",
+            "دورة",
+            "منصة تعليمية",
+            "تدريب"
+          ],
+          "keywords_en": [
+            "course",
+            "courses",
+            "online learning",
+            "training"
+          ]
+        },
+        {
+          "id": "research",
+          "name_ar": "أبحاث علمية",
+          "keywords_ar": [
+            "بحث علمي",
+            "مجلة علمية",
+            "دراسة"
+          ],
+          "keywords_en": [
+            "research",
+            "scientific research",
+            "academic study"
+          ]
+        }
+      ],
+      "keywords_en": [
+        "education",
+        "school",
+        "schools",
+        "student",
+        "students",
+        "learning",
+        "curriculum",
+        "university",
+        "college",
+        "course",
+        "training"
+      ]
+    },
+    {
+      "id": "health",
+      "name_ar": "الصحة والطب",
+      "name_en": "Health and Medicine",
+      "keywords_ar": [
+        "صحة",
+        "طب",
+        "طبيب",
+        "مستشفى",
+        "عيادة",
+        "صيدلية"
+      ],
+      "subcategories": [
+        {
+          "id": "hospital",
+          "name_ar": "مستشفيات",
+          "keywords_ar": [
+            "مستشفى",
+            "مستشفيات"
+          ],
+          "keywords_en": [
+            "hospital",
+            "hospitals"
+          ]
+        },
+        {
+          "id": "clinic",
+          "name_ar": "عيادات وأطباء",
+          "keywords_ar": [
+            "عيادة",
+            "دكتور",
+            "طبيب"
+          ],
+          "keywords_en": [
+            "clinic",
+            "clinics",
+            "doctor"
+          ]
+        },
+        {
+          "id": "pharmacy",
+          "name_ar": "صيدليات",
+          "keywords_ar": [
+            "صيدلية",
+            "دواء",
+            "أدوية"
+          ],
+          "keywords_en": [
+            "pharmacy",
+            "pharmacies",
+            "medication"
+          ]
+        },
+        {
+          "id": "laboratory",
+          "name_ar": "معامل وتحاليل",
+          "keywords_ar": [
+            "معمل",
+            "تحاليل",
+            "أشعة"
+          ],
+          "keywords_en": [
+            "laboratory",
+            "lab",
+            "medical tests"
+          ]
+        }
+      ],
+      "keywords_en": [
+        "health",
+        "medicine",
+        "medical",
+        "doctor",
+        "hospital",
+        "clinic",
+        "pharmacy",
+        "drug",
+        "medicine"
+      ]
+    },
+    {
+      "id": "government",
+      "name_ar": "حكومة وخدمات عامة",
+      "name_en": "Government and Public Services",
+      "keywords_ar": [
+        "حكومة",
+        "حكومي",
+        "وزارة",
+        "محافظة",
+        "خدمات حكومية"
+      ],
+      "subcategories": [
+        {
+          "id": "government_services",
+          "name_ar": "خدمات حكومية",
+          "keywords_ar": [
+            "خدمة حكومية",
+            "استخراج",
+            "استعلام"
+          ],
+          "keywords_en": [
+            "government services",
+            "public service"
+          ]
+        },
+        {
+          "id": "ministries",
+          "name_ar": "وزارات وهيئات",
+          "keywords_ar": [
+            "وزارة",
+            "هيئة",
+            "مصلحة"
+          ],
+          "keywords_en": [
+            "ministry",
+            "ministries",
+            "authority"
+          ]
+        },
+        {
+          "id": "governorates",
+          "name_ar": "محافظات ومدن",
+          "keywords_ar": [
+            "محافظة",
+            "مدينة",
+            "حي"
+          ],
+          "keywords_en": [
+            "governorate",
+            "city",
+            "municipality"
+          ]
+        }
+      ],
+      "keywords_en": [
+        "government",
+        "ministry",
+        "governorate",
+        "public service",
+        "official",
+        "municipality"
+      ]
+    },
+    {
+      "id": "news",
+      "name_ar": "أخبار وصحافة",
+      "name_en": "News and Journalism",
+      "keywords_ar": [
+        "أخبار",
+        "صحافة",
+        "خبر",
+        "جريدة",
+        "سياسة"
+      ],
+      "subcategories": [
+        {
+          "id": "local_news",
+          "name_ar": "أخبار محلية",
+          "keywords_ar": [
+            "مصر",
+            "محلي",
+            "محافظة"
+          ],
+          "keywords_en": [
+            "local news"
+          ]
+        },
+        {
+          "id": "business_news",
+          "name_ar": "أخبار اقتصادية",
+          "keywords_ar": [
+            "اقتصاد",
+            "بورصة",
+            "أعمال"
+          ],
+          "keywords_en": [
+            "business news",
+            "economic news"
+          ]
+        },
+        {
+          "id": "sports_news",
+          "name_ar": "أخبار رياضية",
+          "keywords_ar": [
+            "رياضة",
+            "كرة",
+            "مباريات"
+          ],
+          "keywords_en": [
+            "sports news"
+          ]
+        }
+      ],
+      "keywords_en": [
+        "news",
+        "journalism",
+        "newspaper",
+        "press",
+        "politics",
+        "breaking"
+      ]
+    },
+    {
+      "id": "business",
+      "name_ar": "شركات وأعمال",
+      "name_en": "Business and Companies",
+      "keywords_ar": [
+        "شركة",
+        "أعمال",
+        "تجارة",
+        "مؤسسة",
+        "خدمات تجارية"
+      ],
+      "subcategories": [
+        {
+          "id": "technology_business",
+          "name_ar": "شركات تقنية",
+          "keywords_ar": [
+            "برمجة",
+            "تكنولوجيا",
+            "سوفت وير"
+          ],
+          "keywords_en": [
+            "technology company",
+            "software company"
+          ]
+        },
+        {
+          "id": "commerce",
+          "name_ar": "تجارة ومتاجر",
+          "keywords_ar": [
+            "متجر",
+            "شراء",
+            "بيع",
+            "تسوق"
+          ],
+          "keywords_en": [
+            "commerce",
+            "online store",
+            "shopping"
+          ]
+        },
+        {
+          "id": "startups",
+          "name_ar": "شركات ناشئة",
+          "keywords_ar": [
+            "شركة ناشئة",
+            "ريادة أعمال"
+          ],
+          "keywords_en": [
+            "startup",
+            "startups",
+            "entrepreneurship"
+          ]
+        }
+      ],
+      "keywords_en": [
+        "business",
+        "company",
+        "companies",
+        "commerce",
+        "trade",
+        "startup",
+        "enterprise",
+        "shop",
+        "store"
+      ]
+    },
+    {
+      "id": "jobs",
+      "name_ar": "وظائف وتوظيف",
+      "name_en": "Jobs and Careers",
+      "keywords_ar": [
+        "وظائف",
+        "عمل",
+        "توظيف",
+        "وظيفة",
+        "سيرة ذاتية"
+      ],
+      "subcategories": [
+        {
+          "id": "job_listings",
+          "name_ar": "إعلانات وظائف",
+          "keywords_ar": [
+            "وظائف شاغرة",
+            "فرص عمل"
+          ],
+          "keywords_en": [
+            "job listings",
+            "job vacancies",
+            "job openings"
+          ]
+        },
+        {
+          "id": "career_services",
+          "name_ar": "خدمات مهنية",
+          "keywords_ar": [
+            "تدريب مهني",
+            "تطوير مهني"
+          ],
+          "keywords_en": [
+            "career development",
+            "professional training"
+          ]
+        }
+      ],
+      "keywords_en": [
+        "job",
+        "jobs",
+        "career",
+        "careers",
+        "employment",
+        "hiring",
+        "vacancy",
+        "resume"
+      ]
+    },
+    {
+      "id": "technology",
+      "name_ar": "تقنية وبرمجة",
+      "name_en": "Technology",
+      "keywords_ar": [
+        "تقنية",
+        "تكنولوجيا",
+        "برمجة",
+        "إنترنت",
+        "ذكاء اصطناعي"
+      ],
+      "subcategories": [
+        {
+          "id": "software",
+          "name_ar": "برمجيات وتطبيقات",
+          "keywords_ar": [
+            "برنامج",
+            "تطبيق",
+            "منصة"
+          ],
+          "keywords_en": [
+            "software",
+            "apps",
+            "applications"
+          ]
+        },
+        {
+          "id": "programming",
+          "name_ar": "برمجة وتطوير",
+          "keywords_ar": [
+            "كود",
+            "تطوير ويب",
+            "لغة برمجة"
+          ],
+          "keywords_en": [
+            "programming",
+            "web development",
+            "coding"
+          ]
+        }
+      ],
+      "keywords_en": [
+        "technology",
+        "tech",
+        "software",
+        "programming",
+        "internet",
+        "artificial intelligence",
+        "app",
+        "application",
+        "web development"
+      ]
+    },
+    {
+      "id": "culture",
+      "name_ar": "ثقافة وفنون",
+      "name_en": "Culture and Arts",
+      "keywords_ar": [
+        "ثقافة",
+        "فن",
+        "موسيقى",
+        "مسرح",
+        "سينما",
+        "تراث"
+      ],
+      "subcategories": [
+        {
+          "id": "arts",
+          "name_ar": "فنون",
+          "keywords_ar": [
+            "فن",
+            "رسم",
+            "موسيقى"
+          ],
+          "keywords_en": [
+            "arts",
+            "painting",
+            "music"
+          ]
+        },
+        {
+          "id": "heritage",
+          "name_ar": "تراث وآثار",
+          "keywords_ar": [
+            "تراث",
+            "آثار",
+            "تاريخ"
+          ],
+          "keywords_en": [
+            "heritage",
+            "archaeology",
+            "history"
+          ]
+        }
+      ],
+      "keywords_en": [
+        "culture",
+        "arts",
+        "art",
+        "music",
+        "theater",
+        "cinema",
+        "heritage",
+        "history"
+      ]
+    },
+    {
+      "id": "sports",
+      "name_ar": "رياضة",
+      "name_en": "Sports",
+      "keywords_ar": [
+        "رياضة",
+        "كرة القدم",
+        "نادي",
+        "بطولة",
+        "مباريات"
+      ],
+      "subcategories": [],
+      "keywords_en": [
+        "sport",
+        "sports",
+        "football",
+        "soccer",
+        "club",
+        "tournament",
+        "match",
+        "league"
+      ]
+    },
+    {
+      "id": "tourism",
+      "name_ar": "سياحة وسفر",
+      "name_en": "Tourism and Travel",
+      "keywords_ar": [
+        "سياحة",
+        "سفر",
+        "فنادق",
+        "رحلات",
+        "أماكن سياحية"
+      ],
+      "subcategories": [],
+      "keywords_en": [
+        "tourism",
+        "travel",
+        "hotel",
+        "hotels",
+        "trip",
+        "vacation",
+        "tourist",
+        "destination"
+      ]
+    },
+    {
+      "id": "services",
+      "name_ar": "خدمات",
+      "name_en": "Services",
+      "keywords_ar": [
+        "خدمات",
+        "دليل",
+        "مواعيد",
+        "حجز",
+        "استعلام"
+      ],
+      "subcategories": [],
+      "keywords_en": [
+        "service",
+        "services",
+        "directory",
+        "appointment",
+        "booking",
+        "reservation",
+        "guide"
+      ]
+    },
+    {
+      "id": "media",
+      "name_ar": "إعلام وفيديو",
+      "name_en": "Media and Video",
+      "keywords_ar": [
+        "فيديو",
+        "قناة",
+        "يوتيوب",
+        "إعلام",
+        "بودكاست"
+      ],
+      "subcategories": [],
+      "keywords_en": [
+        "media",
+        "video",
+        "channel",
+        "youtube",
+        "podcast",
+        "broadcast"
+      ]
+    },
+    {
+      "id": "other",
+      "name_ar": "أخرى",
+      "name_en": "Other",
+      "keywords_ar": [],
+      "subcategories": [],
+      "keywords_en": [
+        "general"
+      ]
+    }
   ],
-  "classification_policy":{"primary_category_required":true,"subcategory_optional":true,"max_primary_categories":1,"max_subcategories":5,"automated_classification_status":"candidate","manual_review_required_for_approved":true,"do_not_infer_location_from_domain":true,"do_not_infer_ownership_from_category":true}
+  "classification_policy": {
+    "primary_category_required": true,
+    "subcategory_optional": true,
+    "max_primary_categories": 1,
+    "max_subcategories": 5,
+    "automated_classification_status": "candidate",
+    "manual_review_required_for_approved": true,
+    "do_not_infer_location_from_domain": true,
+    "do_not_infer_ownership_from_category": true
+  }
 }

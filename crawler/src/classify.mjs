@@ -23,7 +23,7 @@ function countMatches(text, keyword) {
 function scoreEntry(text, title, description, entry) {
   let score = 0;
   const reasons = [];
-  for (const keyword of entry.keywords_ar || []) {
+  for (const keyword of [...(entry.keywords_ar || []), ...(entry.keywords_en || [])]) {
     const titleHits = countMatches(title, keyword);
     const descriptionHits = countMatches(description, keyword);
     const textHits = countMatches(text, keyword);
@@ -58,13 +58,18 @@ export function classifyContent({ title = '', description = '', summary = '', ex
     });
   }
 
-  if (/holyquranradio|quranradio|اذاعة القرآن|راديو القرآن/.test(`${sourceHint} ${normalizedTitle} ${normalizedText}`)) {
+  const quranSourceText = `${sourceHint} ${normalizedTitle} ${normalizedText}`;
+  const isQuranSite = /quran com|quran ksu|mp3quran|tanzil net|surahquran|quran navigator|holy quran|noble quran/.test(quranSourceText);
+  const isQuranRadio = /holyquranradio|quranradio|اذاعة القرآن|راديو القرآن/.test(quranSourceText);
+  if (isQuranSite || isQuranRadio) {
     const quran = candidates.find((candidate) => candidate.category === 'quran');
+    const keyword = isQuranRadio ? 'quran_radio_source' : 'quran_site_source';
+    const points = isQuranRadio ? 20 : 12;
     if (quran) {
-      quran.score += 20;
-      quran.reasons.push({ keyword: 'quran_radio_source', titleHits: 0, descriptionHits: 0, textHits: 1, points: 20 });
+      quran.score += points;
+      quran.reasons.push({ keyword, titleHits: 0, descriptionHits: 0, textHits: 1, points });
     } else {
-      candidates.push({ category: 'quran', score: 20, reasons: [{ keyword: 'quran_radio_source', titleHits: 0, descriptionHits: 0, textHits: 1, points: 20 }], subcategories: [{ id: 'quran_audio', score: 20, reasons: [] }] });
+      candidates.push({ category: 'quran', score: points, reasons: [{ keyword, titleHits: 0, descriptionHits: 0, textHits: 1, points }], subcategories: [{ id: 'quran_audio', score: points, reasons: [] }] });
     }
   }
 
