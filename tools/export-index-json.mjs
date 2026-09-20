@@ -33,7 +33,7 @@ const result = rows.map((row) => {
     العنوان: row.title || '',
     الوصف: row.description || '',
     رابط_الأيقونة: row.icon_url || '',
-    التصنيفات: unique([category?.name_ar, ...subcategoryIds.map((id) => subcategoryById.get(id)?.name_ar || id)]),
+    التصنيفات: unique([category?.name_ar, ...subcategoryIds.map((id) => subcategoryById.get(id)?.name_ar)]),
     الكلمات_المفتاحية: unique([...reasonKeywords, ...(category?.keywords_ar || [])]).slice(0, 10),
     الخلاصة: row.summary || ''
   };
