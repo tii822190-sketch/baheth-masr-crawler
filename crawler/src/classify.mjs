@@ -59,7 +59,7 @@ export function classifyContent({ title = '', description = '', summary = '', ex
   }
 
   const quranSourceText = `${sourceHint} ${normalizedTitle} ${normalizedText}`;
-  const isQuranSite = /quran com|quran ksu|mp3quran|tanzil net|surahquran|quran navigator|holy quran|noble quran/.test(quranSourceText);
+  const isQuranSite = /quran com|quran ksu|mp3quran|misrquran|tanzil net|surahquran|quran navigator|holy quran|noble quran/.test(quranSourceText);
   const isQuranRadio = /holyquranradio|quranradio|اذاعة القرآن|راديو القرآن/.test(quranSourceText);
   if (isQuranSite || isQuranRadio) {
     const quran = candidates.find((candidate) => candidate.category === 'quran');
