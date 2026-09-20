@@ -25,8 +25,8 @@ function arabicLabels(categoryId, subcategoryIds) {
 export function extractLightHtml(html, responseUrl, contentType = 'text/html') {
   const full = extractHtml(html, responseUrl, contentType);
   const description = clean(clean(full.description) || clean(full.summary) || clean(full.searchSnippet), MAX_DESCRIPTION);
-  const summary = '';
-  const snippet = clean(full.searchSnippet || description, MAX_SNIPPET);
+  const summary = clean(clean(full.summary) || clean(full.extractedText) || description, MAX_SNIPPET);
+  const snippet = summary;
   const keywords = unique([
     ...(full.subcategoryCandidates || []),
     ...((full.classificationReasons || []).map((item) => item.keyword).filter((keyword) => !String(keyword).endsWith('_source'))),
@@ -42,7 +42,7 @@ export function extractLightHtml(html, responseUrl, contentType = 'text/html') {
     description,
     summary,
     searchSnippet: snippet,
-    searchText: clean(`${full.title} ${description} ${snippet}`, 1800),
+    searchText: clean(`${full.title} ${description} ${summary}`, 1800),
     extractedText: clean(snippet, 900),
     contentHash,
     categoryCandidate: full.categoryCandidate || 'other',
