@@ -22,6 +22,7 @@ function createCoreTables() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       url TEXT NOT NULL UNIQUE,
       crawl_status TEXT NOT NULL DEFAULT 'pending',
+      discovery_cursor TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
@@ -47,6 +48,7 @@ function createCoreTables() {
     CREATE INDEX IF NOT EXISTS idx_site_pages_site ON site_pages(site_id,id);
     CREATE INDEX IF NOT EXISTS idx_index_results_url ON index_results(url);
   `);
+  if (!columns('sites').includes('discovery_cursor')) db.exec('ALTER TABLE sites ADD COLUMN discovery_cursor TEXT');
 }
 
 export function initDb() {

@@ -2,6 +2,11 @@ name: Discovery Spider
 
 on:
   workflow_dispatch:
+    inputs:
+      resume_incomplete:
+        description: Resume one incomplete site from its saved cursor
+        required: false
+        default: 'false'
 
 permissions:
   contents: write
@@ -19,6 +24,8 @@ jobs:
       DISCOVERY_MAX_PAGES_PER_SITE: '10000'
       DISCOVERY_MAX_SITEMAPS: '2000'
       DISCOVERY_TIMEOUT_MS: '20000'
+      DISCOVERY_RESUME_INCOMPLETE: ${{ inputs.resume_incomplete || 'false' }}
+      DISCOVERY_VALIDATE_CONCURRENCY: '10'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -29,6 +36,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Initialize the local three-table database
+        run: node crawler/src/cli.mjs init
       - name: Discover one pending site from all sitemaps
         run: node tools/discovery-spider.mjs
       - name: Save local crawler database
