@@ -2,8 +2,7 @@ import crypto from 'node:crypto';
 import { extractHtml } from './extract.mjs';
 import taxonomy from '../../taxonomy/search-taxonomy.json' with { type: 'json' };
 
-const MAX_DESCRIPTION = 500;
-const MAX_SUMMARY = 600;
+const MAX_DESCRIPTION = 250;
 const MAX_SNIPPET = 320;
 const MAX_LABELS = 3;
 
@@ -25,9 +24,9 @@ function arabicLabels(categoryId, subcategoryIds) {
 
 export function extractLightHtml(html, responseUrl, contentType = 'text/html') {
   const full = extractHtml(html, responseUrl, contentType);
-  const description = clean(full.description || full.summary, MAX_DESCRIPTION);
-  const summary = clean(clean(full.summary) || description || full.searchSnippet, MAX_SUMMARY);
-  const snippet = clean(full.searchSnippet || summary || description, MAX_SNIPPET);
+  const description = clean(clean(full.description) || clean(full.summary) || clean(full.searchSnippet), MAX_DESCRIPTION);
+  const summary = '';
+  const snippet = clean(full.searchSnippet || description, MAX_SNIPPET);
   const keywords = unique([
     ...(full.subcategoryCandidates || []),
     ...((full.classificationReasons || []).map((item) => item.keyword).filter((keyword) => !String(keyword).endsWith('_source'))),
@@ -43,8 +42,8 @@ export function extractLightHtml(html, responseUrl, contentType = 'text/html') {
     description,
     summary,
     searchSnippet: snippet,
-    searchText: clean(`${full.title} ${description} ${summary} ${snippet}`, 1800),
-    extractedText: clean(`${summary}\n${snippet}`, 900),
+    searchText: clean(`${full.title} ${description} ${snippet}`, 1800),
+    extractedText: clean(snippet, 900),
     contentHash,
     categoryCandidate: full.categoryCandidate || 'other',
     subcategoryCandidates: arabic.keywordLabels,
@@ -59,4 +58,4 @@ export function extractLightHtml(html, responseUrl, contentType = 'text/html') {
   };
 }
 
-export { MAX_DESCRIPTION, MAX_SUMMARY, MAX_SNIPPET, MAX_LABELS };
+export { MAX_DESCRIPTION, MAX_SNIPPET, MAX_LABELS };
