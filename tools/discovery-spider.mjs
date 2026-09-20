@@ -107,6 +107,8 @@ async function discoverSite(site) {
   const cursor = parseCursor(site.discovery_cursor, site.url);
   const seen = new Set(cursor.seenSitemaps);
   const pending = [...cursor.pendingSitemaps];
+  let lastCompletedSitemap = cursor.currentSitemap || null;
+  let lastCompletedPageIndex = cursor.currentPageIndex || 0;
   const robots = await fetchBytes(`${new URL(site.url).origin}/robots.txt`);
   for (const line of String(robots || '').split(/\r?\n/)) { const match = line.match(/^\s*sitemap\s*:\s*(\S+)/i); const candidate = match && sitemapUrl(match[1], site.url); if (candidate && !seen.has(candidate) && !pending.includes(candidate)) pending.push(candidate); }
   let current = cursor.currentSitemap;
@@ -131,12 +133,14 @@ async function discoverSite(site) {
     pageIndex += candidates.length;
     const reachedLimit = totalAccepted >= MAX_PAGES_PER_SITE && pageIndex < parsed.pages.length;
     if (reachedLimit) { saveCursor(site.id, { pendingSitemaps: pending, seenSitemaps: [...seen], currentSitemap: current, currentPageIndex: pageIndex }); break; }
-    seen.add(current); current = null; pageIndex = 0;
-    saveCursor(site.id, { pendingSitemaps: pending, seenSitemaps: [...seen], currentSitemap: null, currentPageIndex: 0 });
+    seen.add(current); lastCompletedSitemap = current; lastCompletedPageIndex = pageIndex;
+    current = null; pageIndex = 0;
+    saveCursor(site.id, { pendingSitemaps: pending, seenSitemaps: [...seen], currentSitemap: lastCompletedSitemap, currentPageIndex: lastCompletedPageIndex });
   }
   const incomplete = totalAccepted >= MAX_PAGES_PER_SITE && (current || pending.length || seen.size >= MAX_SITEMAPS);
   const status = incomplete ? 'incomplete' : 'completed';
-  db.prepare('UPDATE sites SET crawl_status=?,discovery_cursor=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(status, incomplete ? JSON.stringify({ pendingSitemaps: pending, seenSitemaps: [...seen], currentSitemap: current, currentPageIndex: pageIndex }) : null, site.id);
+  const finalCursor = { pendingSitemaps: pending, seenSitemaps: [...seen], currentSitemap: current || lastCompletedSitemap, currentPageIndex: current ? pageIndex : lastCompletedPageIndex };
+  db.prepare('UPDATE sites SET crawl_status=?,discovery_cursor=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(status, JSON.stringify(finalCursor), site.id);
   return { site_id: site.id, site: site.url, status, sitemaps_scanned: sitemapCount, pages_added: pagesAdded, pages_total: totalAccepted, max_pages: MAX_PAGES_PER_SITE, rejected_404_or_unreachable: rejected404, rejected_invalid: rejectedInvalid, resume_point_saved: incomplete };
 }
 
