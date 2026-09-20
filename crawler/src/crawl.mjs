@@ -1,68 +1,205 @@
 import { spawn } from 'node:child_process';
-import { db, resultsDb, canonicalize } from './db.mjs';
+import { db, canonicalize } from './db.mjs';
 import { extractHtml } from './extract.mjs';
-import { extractLightHtml } from './light-extract.mjs';
-import { discover } from './discovery.mjs';
+import taxonomy from '../../taxonomy/search-taxonomy.json' with { type: 'json' };
 
-const timeoutMs = Number(process.env.CRAWLER_TIMEOUT_MS || 20000);
-const pageTimeoutMs = Math.max(timeoutMs, Number(process.env.CRAWLER_PAGE_TIMEOUT_MS || 300000));
-const limit = Math.max(1, Number(process.env.CRAWLER_LIMIT || 10));
-const maxPages = Math.max(1, Number(process.env.CRAWLER_MAX_PAGES || 500));
-const delayMs = Math.max(0, Number(process.env.CRAWLER_DELAY_MS || 300));
-const retries = Math.max(0, Number(process.env.CRAWLER_RETRIES || 2));
-const concurrency = Math.max(1, Math.min(10, Number(process.env.CRAWLER_CONCURRENCY || 2)));
-const browserConcurrency = Math.max(1, Math.min(7, Number(process.env.CRAWLER_BROWSER_CONCURRENCY || 7)));
+const batchSize = Math.max(1, Number(process.env.CRAWLER_BATCH_SIZE || 20));
+const maxPages = Math.max(1, Number(process.env.CRAWLER_MAX_PAGES || batchSize));
+const concurrency = Math.max(1, Math.min(10, Number(process.env.CRAWLER_CONCURRENCY || 10)));
+const retries = Math.max(0, Number(process.env.CRAWLER_RETRIES || 1));
+const pageTimeoutMs = Math.max(1000, Number(process.env.CRAWLER_PAGE_TIMEOUT_MS || 120000));
 const browserBudgetMs = Math.max(1000, Number(process.env.CRAWLER_BROWSER_BUDGET_MS || 15000));
-const batchSize = Math.max(1, Math.min(maxPages, Number(process.env.CRAWLER_BATCH_SIZE || 50)));
-const fetchMode = process.env.CRAWLER_FETCH_MODE || 'browser';
-const sourceMode = process.env.CRAWLER_SOURCE || 'active_sites';
-const oneBatch = process.env.CRAWLER_ONE_BATCH === '1';
-const retryFailed = process.env.CRAWLER_RETRY_FAILED === '1';
-const lightMode = process.env.CRAWLER_LIGHT_MODE === '1';
+const fetchMode = process.env.CRAWLER_FETCH_MODE || 'hybrid';
+const retryLimit = Math.max(1, Number(process.env.CRAWLER_REVIEW_RETRIES || 1));
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-function createRun(type) { return db.prepare(`INSERT INTO crawl_runs (run_type,status,started_at,target_count) VALUES (?, 'running', CURRENT_TIMESTAMP, 0)`).run(type).lastInsertRowid; }
-function hasResultsTable() { return Boolean(resultsDb.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='crawl_results'").get()); }
-function isApproved(canonical) { return hasResultsTable() && Boolean(resultsDb.prepare("SELECT 1 FROM crawl_results WHERE canonical_url=? AND crawl_status='success' AND distribution_status='approved' LIMIT 1").get(canonical)); }
-function createTargets(runId, runType) {
-  const manualUrl = process.env.CRAWLER_MANUAL_URL || '';
-  if (process.env.CRAWLER_FORCE_MANUAL_URL === '1' && manualUrl) {
-    const canonical = canonicalize(manualUrl);
-    const site = db.prepare("SELECT id AS site_id FROM sites WHERE url=? OR url=? LIMIT 1").get(canonical, manualUrl);
-    if (canonical && !db.prepare("SELECT 1 FROM crawl_targets WHERE run_id=? AND canonical_url=? LIMIT 1").get(runId, canonical)) {
-      db.prepare(`INSERT INTO crawl_targets (run_id,target_type,site_id,url,canonical_url,parent_url,priority,reason) VALUES (?, 'site', ?, ?, ?, '', 100, 'forced_manual_url')`).run(runId, site?.site_id || null, manualUrl, canonical);
-      db.prepare('UPDATE crawl_runs SET target_count=target_count+1 WHERE id=?').run(runId);
+
+function createRun(type) {
+  return db.prepare(`INSERT INTO crawl_runs (run_type,status,started_at,target_count) VALUES (?, 'running', CURRENT_TIMESTAMP, 0)`).run(type).lastInsertRowid;
+}
+
+function acquireBatch(runId) {
+  const pending = db.prepare(`
+    SELECT id,site_id,url,crawl_status,crawl_attempts
+    FROM site_pages
+    WHERE COALESCE(crawl_status,'pending') IN ('pending','queued')
+    ORDER BY id
+    LIMIT ?
+  `).all(Math.min(batchSize, maxPages));
+  const candidates = pending.length ? pending : db.prepare(`
+    SELECT id,site_id,url,crawl_status,crawl_attempts
+    FROM site_pages
+    WHERE COALESCE(crawl_status,'needs_review')='needs_review'
+      AND COALESCE(crawl_attempts,0) < ?
+    ORDER BY id
+    LIMIT ?
+  `).all(retryLimit + 1, Math.min(batchSize, maxPages));
+  if (!candidates.length) {
+    db.prepare('UPDATE crawl_runs SET target_count=0 WHERE id=?').run(runId);
+    return { targets: [], phase: pending.length ? 'pending' : 'review' };
+  }
+  const mark = db.prepare(`UPDATE site_pages SET crawl_status='processing', crawl_attempts=COALESCE(crawl_attempts,0)+1 WHERE id=?`);
+  for (const page of candidates) mark.run(page.id);
+  db.prepare('UPDATE crawl_runs SET target_count=? WHERE id=?').run(candidates.length, runId);
+  return { targets: candidates, phase: pending.length ? 'pending' : 'review' };
+}
+
+function acquireBrowserSlot(state) {
+  if (state.active < state.limit) { state.active += 1; return Promise.resolve(); }
+  return new Promise((resolve) => state.waiters.push(resolve));
+}
+function releaseBrowserSlot(state) {
+  state.active -= 1;
+  state.waiters.shift()?.();
+}
+
+async function browserFetch(url, browserState) {
+  await acquireBrowserSlot(browserState);
+  try {
+    return await new Promise((resolve, reject) => {
+      const started = Date.now();
+      const child = spawn('/usr/bin/chromium', [
+        '--headless=new', '--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage',
+        `--virtual-time-budget=${browserBudgetMs}`, '--run-all-compositor-stages-before-draw', '--dump-dom', url,
+      ], { stdio: ['ignore', 'pipe', 'pipe'] });
+      let body = '';
+      let error = '';
+      const timer = setTimeout(() => { child.kill('SIGKILL'); reject(new Error('browser_timeout')); }, pageTimeoutMs);
+      child.stdout.on('data', (chunk) => { body += chunk; });
+      child.stderr.on('data', (chunk) => { error += chunk; });
+      child.on('close', (code) => {
+        clearTimeout(timer);
+        if (code === 0 && body.trim()) resolve({ url, responseUrl: url, status: 200, contentType: 'text/html', body, duration: Date.now() - started, method: 'browser' });
+        else reject(new Error(error.trim().slice(-300) || `browser_exit_${code}`));
+      });
+    });
+  } finally {
+    releaseBrowserSlot(browserState);
+  }
+}
+
+async function httpFetch(url) {
+  const started = Date.now();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), pageTimeoutMs);
+  try {
+    const response = await fetch(url, { signal: controller.signal, redirect: 'follow', headers: { 'user-agent': 'BahethMasrCrawler/1.0 (+staging)' } });
+    return { url, responseUrl: response.url || url, status: response.status, contentType: response.headers.get('content-type') || '', body: await response.text(), duration: Date.now() - started, method: 'http' };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function fetchOne(url, browserState) {
+  let lastError = '';
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    try {
+      if (fetchMode === 'browser') return await browserFetch(url, browserState);
+      const http = await httpFetch(url);
+      if (fetchMode === 'hybrid' && (http.status >= 400 || !http.contentType.toLowerCase().includes('html') || http.body.length < 200)) {
+        try { return await browserFetch(url, browserState); } catch { return http; }
+      }
+      return http;
+    } catch (error) {
+      lastError = String(error);
+      if (attempt < retries) await sleep(Math.min(5000, 500 * (attempt + 1)));
     }
   }
-  if (sourceMode === 'unindexed_pages') {
-    const pendingTargets = db.prepare("SELECT id FROM crawl_targets WHERE status IN ('queued','processing') ORDER BY priority DESC,id LIMIT ?").all(maxPages);
-    if (pendingTargets.length) { const ids = pendingTargets.map((target) => target.id); const placeholders = ids.map(() => '?').join(','); db.prepare(`UPDATE crawl_targets SET run_id=? WHERE id IN (${placeholders})`).run(runId, ...ids); db.prepare('UPDATE crawl_runs SET target_count=? WHERE id=?').run(pendingTargets.length, runId); return pendingTargets.length; }
-    const statusClause = retryFailed ? "COALESCE(p.crawl_status,'pending') NOT IN ('indexed','success')" : "COALESCE(p.crawl_status,'pending') IN ('pending','queued')";
-    const candidates = db.prepare(`SELECT p.id AS page_id,p.site_id,p.url FROM site_pages p WHERE p.url <> '' AND p.url NOT LIKE '%?%' AND p.url NOT LIKE '%/search/%' AND p.url NOT LIKE '%/label/%' AND ${statusClause} AND NOT EXISTS (SELECT 1 FROM crawl_targets t WHERE t.run_id=? AND t.canonical_url=p.url) ORDER BY p.id LIMIT ?`).all(runId, maxPages);
-    const pages = candidates.filter((page) => !isApproved(canonicalize(page.url)));
-    const insert = db.prepare(`INSERT INTO crawl_targets (run_id,target_type,site_id,page_id,url,canonical_url,parent_url,priority,reason) VALUES (?, 'page', ?, ?, ?, ?, '', ?, ?)`);
-    for (const page of pages) { const canonical = canonicalize(page.url); if (canonical) insert.run(runId, page.site_id, page.page_id, page.url, canonical, 60, 'unindexed_page'); }
-    db.prepare('UPDATE crawl_runs SET target_count=? WHERE id=?').run(pages.length, runId); return pages.length;
-  }
-  if (process.env.CRAWLER_MANUAL_ONLY === '1') return 0;
-  const sites = db.prepare(`SELECT id AS site_id,url,priority FROM sites WHERE status='active' ORDER BY priority DESC LIMIT ?`).all(limit);
-  const insert = db.prepare(`INSERT INTO crawl_targets (run_id,target_type,site_id,url,canonical_url,parent_url,priority,reason) VALUES (?, 'site', ?, ?, ?, '', ?, ?)`);
-  for (const site of sites) insert.run(runId, site.site_id, site.url, canonicalize(site.url), site.priority, runType);
-  db.prepare('UPDATE crawl_runs SET target_count=? WHERE id=?').run(sites.length, runId); return sites.length;
+  return { url, responseUrl: '', status: 0, contentType: '', body: '', duration: pageTimeoutMs, method: fetchMode, error: lastError };
 }
-function promote(runId) { const candidates = db.prepare(`SELECT id,source_site_id,source_page_id,discovered_url,canonical_url,discovery_source,discovered_from_url FROM crawl_discoveries WHERE status IN ('pending','queued') AND discovery_source IN ('html_link','manual') AND canonical_url NOT LIKE '%/search%' AND canonical_url NOT LIKE '%?%' ORDER BY id LIMIT ?`).all(batchSize); const insert = db.prepare(`INSERT INTO crawl_targets (run_id,target_type,site_id,page_id,url,canonical_url,parent_url,priority,reason) VALUES (?, 'page', ?, ?, ?, ?, ?, 60, ?)`); let added = 0; for (const item of candidates) { if (isApproved(item.canonical_url)) { db.prepare("UPDATE crawl_discoveries SET status='completed' WHERE id=?").run(item.id); continue; } const existing = db.prepare("SELECT 1 FROM crawl_targets WHERE run_id=? AND canonical_url=? LIMIT 1").get(runId,item.canonical_url); if (!existing) { insert.run(runId,item.source_site_id,item.source_page_id,item.discovered_url,item.canonical_url,item.discovered_from_url||'',item.discovery_source); added += 1; } db.prepare("UPDATE crawl_discoveries SET status='queued' WHERE id=?").run(item.id); } return added; }
-function addDiscoveries(runId,siteId,pageId,fromUrl,meta) { const insert=db.prepare(`INSERT INTO crawl_discoveries (run_id,source_site_id,source_page_id,discovered_url,canonical_url,discovery_source,discovered_from_url,title_hint,description_hint) VALUES (?,?,?,?,?,?,?,?,?)`); let count=0; for(const url of meta.internalLinks.slice(0,100)){const canonical=canonicalize(url);if(!canonical)continue;try{insert.run(runId,siteId||null,pageId||null,url,canonical,'html_link',fromUrl,meta.title||'',meta.description||'');count+=1;}catch{}} return count; }
-let activeBrowsers = 0;
-const browserWaiters = [];
-async function acquireBrowserSlot() { if (activeBrowsers < browserConcurrency) { activeBrowsers += 1; return; } await new Promise((resolve) => browserWaiters.push(resolve)); activeBrowsers += 1; }
-function releaseBrowserSlot() { activeBrowsers -= 1; browserWaiters.shift()?.(); }
-async function browserFetch(url) { await acquireBrowserSlot(); try { return await new Promise((resolve,reject)=>{const started=Date.now();const child=spawn('/usr/bin/chromium',['--headless=new','--no-sandbox','--disable-gpu','--disable-dev-shm-usage',`--virtual-time-budget=${browserBudgetMs}`,'--run-all-compositor-stages-before-draw','--dump-dom',url],{stdio:['ignore','pipe','pipe']});let body='';let error='';const timer=setTimeout(()=>{child.kill('SIGKILL');reject(new Error('browser_timeout'));},pageTimeoutMs);child.stdout.on('data',(chunk)=>{body+=chunk;});child.stderr.on('data',(chunk)=>{error+=chunk;});child.on('close',(code)=>{clearTimeout(timer);if(code===0&&body.trim())resolve({url,responseUrl:url,status:200,contentType:'text/html',body,duration:Date.now()-started,method:'browser'});else reject(new Error(error.trim().slice(-300)||`browser_exit_${code}`));});}); } finally { releaseBrowserSlot(); } }
-async function httpFetch(url) { const started=Date.now();const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),pageTimeoutMs);try{const response=await fetch(url,{signal:controller.signal,redirect:'follow',headers:{'user-agent':'BahethMasrCrawler/1.0 (+staging)'}});return{url,responseUrl:response.url||url,status:response.status,contentType:response.headers.get('content-type')||'',body:await response.text(),duration:Date.now()-started,method:'http'};}finally{clearTimeout(timer);} }
-function shouldUseBrowser(result){if(result.status>=400||!result.contentType.toLowerCase().includes('html')||result.body.length<200)return true;try{const meta=extractHtml(result.body,result.responseUrl,result.contentType);return meta.qualityStatus!=='good'||meta.extractedText.trim().length<200;}catch{return true;}}
-async function fetchOne(url){let lastError='';for(let attempt=0;attempt<=retries;attempt+=1){try{if(fetchMode==='browser')return await browserFetch(url);const http=await httpFetch(url);if(fetchMode==='hybrid'&&shouldUseBrowser(http)){try{return await browserFetch(url);}catch{return http;}}return http;}catch(error){lastError=String(error);if(attempt<retries)await sleep(Math.min(5000,500*(attempt+1)));}}return{url,responseUrl:'',status:0,contentType:'',body:'',duration:pageTimeoutMs,method:fetchMode,error:lastError};}
-async function mapLimit(items,worker,concurrencyLimit){const output=new Array(items.length);let cursor=0;async function consume(){while(true){const index=cursor++;if(index>=items.length)return;output[index]=await worker(items[index],index);}}await Promise.all(Array.from({length:Math.min(concurrencyLimit,items.length)},consume));return output;}
-const empty=()=>({title:'',description:'',summary:'',searchSnippet:'',iconUrl:'',extractedText:'',contentHash:'',qualityStatus:'network_error',reviewStatus:'review',detectedLanguage:'unknown',isDynamic:0,isApi:0,links:[],internalLinks:[],externalLinks:[],socialLinks:[]});
-function pageType(target,meta){if(target.target_type==='site')return'site';if(/\/(search|filter|page\/\d+)(\/|$)/i.test(new URL(target.url).pathname))return'search';if(meta.internalLinks.length>0)return'listing';return'page';}
-function searchText(meta){return[meta.title,meta.description,meta.summary,meta.searchSnippet,meta.extractedText].filter(Boolean).join('\n').replace(/\n{3,}/g,'\n\n').slice(0,60000);}
-export function errorCode(result,output){if(result.error)return result.error.includes('timeout')?'timeout':'fetch_error';if(output.httpStatus===404)return'not_found';if(output.httpStatus===403)return'forbidden';if(output.httpStatus===429)return'rate_limited';if(output.httpStatus>=400)return`http_${output.httpStatus}`;if(!output.contentType.includes('html'))return'not_html';if(output.meta.qualityStatus!=='good')return output.meta.qualityStatus;return'unknown';}
-function saveAndDistribute(runId,type,output,result,target){const meta=output.meta;const status=result.error?'network_error':output.crawlStatus;const good=!result.error&&output.httpStatus>=200&&output.httpStatus<400&&output.contentType.toLowerCase().includes('html')&&meta.qualityStatus==='good';const typeName=pageType(target,meta);const text=good?(lightMode?meta.searchText:searchText(meta)):'';const inserted=resultsDb.prepare(`INSERT INTO crawl_results (source_run_id,run_type,source_target_id,requested_url,canonical_url,response_url,parent_url,site_id,page_id,page_type,http_status,crawl_status,fetch_method,content_type,content_length,title,description,summary,search_snippet,search_text,icon_url,extracted_text,content_hash,quality_status,review_status,detected_language,is_dynamic,is_api,links_json,internal_links_json,external_links_json,social_links_json,discovered_links_count,distribution_status,duration_ms,error_message,category_candidate,subcategory_candidates_json,classification_score,classification_confidence,classification_status,classification_reasons_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(runId,type,target.id,target.url,canonicalize(target.url),output.responseUrl||'',target.parent_url||'',target.site_id||null,target.page_id||null,typeName,output.httpStatus||null,status,result.method||fetchMode,output.contentType||'',output.body?.length||0,meta.title,meta.description,meta.summary,meta.searchSnippet,text,meta.iconUrl,meta.extractedText,meta.contentHash,meta.qualityStatus,meta.reviewStatus,meta.detectedLanguage,meta.isDynamic?1:0,meta.isApi?1:0,JSON.stringify(meta.links),JSON.stringify(meta.internalLinks),JSON.stringify(meta.externalLinks),JSON.stringify(meta.socialLinks),meta.links.length,good?'review_queue':'quarantine',result.duration||0,result.error||'',meta.categoryCandidate||'other',JSON.stringify(meta.subcategoryCandidates||[]),meta.classificationScore||0,meta.classificationConfidence||0,meta.classificationStatus||'candidate',JSON.stringify(meta.classificationReasons||[]));if(good){resultsDb.prepare(`INSERT INTO crawl_review_items (result_id,source_run_id,site_id,page_id,page_type,requested_url,canonical_url,parent_url,title,description,summary,search_snippet,search_text,extracted_text,icon_url,content_hash,quality_status,review_status,detected_language,discovered_links_count,fetched_at,category_candidate,subcategory_candidates_json,classification_score,classification_confidence,classification_status,classification_reasons_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP,?,?,?,?,?,?)`).run(inserted.lastInsertRowid,runId,target.site_id||null,target.page_id||null,typeName,target.url,canonicalize(target.url),target.parent_url||'',meta.title,meta.description,meta.summary,meta.searchSnippet,text,meta.extractedText,meta.iconUrl,meta.contentHash,meta.qualityStatus,'pending',meta.detectedLanguage,meta.links.length,meta.categoryCandidate||'other',JSON.stringify(meta.subcategoryCandidates||[]),meta.classificationScore||0,meta.classificationConfidence||0,meta.classificationStatus||'candidate',JSON.stringify(meta.classificationReasons||[]));return{good:true,discovered:process.env.CRAWLER_DISCOVERY_MODE==='1'?addDiscoveries(runId,target.site_id,target.page_id,target.url,meta):0};}resultsDb.prepare(`INSERT INTO crawl_quarantine (result_id,source_run_id,requested_url,canonical_url,parent_url,http_status,crawl_status,content_type,error_code,error_message) VALUES (?,?,?,?,?,?,?,?,?,?)`).run(inserted.lastInsertRowid,runId,target.url,canonicalize(target.url),target.parent_url||'',output.httpStatus||null,status,output.contentType||'',errorCode(result,output),result.error||errorCode(result,output));return{good:false,discovered:0};}
-export async function run(type='daily_check'){const runId=createRun(type);const queries=String(process.env.CRAWLER_DDG_QUERIES||'').split('|').map((value)=>value.trim()).filter(Boolean);let discovered=await discover(runId,{queries,manualUrl:process.env.CRAWLER_MANUAL_URL||''});createTargets(runId,type);let success=0;let failed=0;let changed=0;let total=0;const drain=process.env.CRAWLER_DRAIN_DISCOVERIES==='1';while(total<maxPages){if(drain)promote(runId);const targets=db.prepare("SELECT * FROM crawl_targets WHERE run_id=? AND status='queued' ORDER BY priority DESC,id LIMIT ?").all(runId,Math.min(batchSize,maxPages-total));if(!targets.length)break;for(const target of targets)db.prepare("UPDATE crawl_targets SET status='processing',attempts=attempts+1,last_attempt_at=CURRENT_TIMESTAMP WHERE id=?").run(target.id);const fetched=await mapLimit(targets,(target)=>fetchOne(target.url),concurrency);for(let index=0;index<targets.length;index+=1){const target=targets[index];const result=fetched[index];let output;if(result.error)output={crawlStatus:'network_error',httpStatus:null,responseUrl:'',contentType:'',body:'',meta:empty(),error:result.error};else{const meta=lightMode?extractLightHtml(result.body,result.responseUrl,result.contentType):extractHtml(result.body,result.responseUrl,result.contentType);try{if(new URL(target.url).hostname.replace(/^www\./,'')!==new URL(result.responseUrl).hostname.replace(/^www\./,''))meta.reviewStatus='review';}catch{meta.reviewStatus='review';}output={crawlStatus:result.status>=200&&result.status<400?'success':'http_error',httpStatus:result.status,responseUrl:result.responseUrl,contentType:result.contentType,body:lightMode?'':result.body,meta,error:''};if(meta.contentHash&&target.site_id){const old=db.prepare('SELECT content_hash FROM site_pages WHERE site_id=? AND url=? LIMIT 1').get(target.site_id,target.url);if(old?.content_hash&&old.content_hash!==meta.contentHash)changed+=1;}}const routed=saveAndDistribute(runId,type,output,result,target);if(routed.good){success+=1;if(target.page_id)db.prepare("UPDATE site_pages SET crawl_status='crawled',last_checked_at=CURRENT_TIMESTAMP WHERE id=?").run(target.page_id);db.prepare("UPDATE crawl_targets SET status='completed' WHERE id=?").run(target.id);db.prepare("UPDATE crawl_discoveries SET status='completed' WHERE canonical_url=? AND status='queued'").run(target.canonical_url);}else{failed+=1;if(target.page_id)db.prepare("UPDATE site_pages SET crawl_status='failed',last_checked_at=CURRENT_TIMESTAMP WHERE id=?").run(target.page_id);db.prepare("UPDATE crawl_targets SET status='failed' WHERE id=?").run(target.id);db.prepare("UPDATE crawl_discoveries SET status='failed' WHERE canonical_url=? AND status='queued'").run(target.canonical_url);}if(process.env.CRAWLER_DISCOVERY_MODE==='1')discovered+=routed.discovered;total+=1;await sleep(delayMs);}if(oneBatch||!drain)break;}db.prepare("UPDATE crawl_runs SET status='completed',finished_at=CURRENT_TIMESTAMP,processed_count=?,success_count=?,failed_count=?,changed_count=?,discovered_count=? WHERE id=?").run(total,success,failed,changed,discovered,runId);return{runId,runType:type,source:sourceMode,total,success,failed,discovered,fetch_mode:fetchMode,concurrency,batch_size:batchSize,max_pages:maxPages,drain,light_mode:lightMode};}
+
+async function mapLimit(items, worker, limit) {
+  const output = new Array(items.length);
+  let cursor = 0;
+  async function consume() {
+    while (true) {
+      const index = cursor++;
+      if (index >= items.length) return;
+      output[index] = await worker(items[index], index);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, consume));
+  return output;
+}
+
+function clean(value, max = 250) { return String(value || '').replace(/\s+/g, ' ').trim().slice(0, max); }
+export function errorCode(result = {}, output = {}) {
+  if (result.error) return String(result.error).includes('timeout') ? 'timeout' : 'fetch_error';
+  if (output.httpStatus === 404) return 'not_found';
+  if (output.httpStatus === 403) return 'forbidden';
+  if (output.httpStatus === 429) return 'rate_limited';
+  if (output.httpStatus >= 400) return `http_${output.httpStatus}`;
+  if (!String(output.contentType || '').toLowerCase().includes('html')) return 'not_html';
+  if (output.meta?.qualityStatus && output.meta.qualityStatus !== 'good') return output.meta.qualityStatus;
+  return 'unknown';
+}
+function mergedKeywords(meta) {
+  const category = taxonomy.categories.find((item) => item.id === meta.categoryCandidate);
+  const subcategories = (meta.subcategoryCandidates || []).map((id) => category?.subcategories?.find((item) => item.id === id)).filter(Boolean);
+  const values = [category?.name_ar, ...(category?.keywords_ar || []), ...subcategories.map((item) => item.name_ar), ...subcategories.flatMap((item) => item.keywords_ar || []), ...(meta.classificationReasons || []).map((item) => item.keyword)];
+  return [...new Set(values.map((value) => clean(value, 80)).filter(Boolean))].join('، ');
+}
+function compactMeta(result) {
+  const meta = extractHtml(result.body, result.responseUrl || result.url, result.contentType || 'text/html');
+  return {
+    url: canonicalize(result.responseUrl || result.url) || result.url,
+    title: clean(meta.title),
+    description: clean(meta.description),
+    iconUrl: clean(meta.iconUrl, 1000),
+    keywords: mergedKeywords(meta),
+    snippet: clean(meta.searchSnippet || meta.summary || meta.description),
+  };
+}
+function isComplete(result, meta) {
+  if (result.error || result.status < 200 || result.status >= 400 || !result.contentType.toLowerCase().includes('html')) return false;
+  return Boolean(meta.url && meta.title && meta.description && meta.iconUrl && meta.keywords && meta.snippet);
+}
+function saveSuccessful(meta) {
+  db.prepare(`
+    INSERT INTO index_results (url,title,description,icon_url,keywords,snippet,updated_at)
+    VALUES (?,?,?,?,?,?,CURRENT_TIMESTAMP)
+    ON CONFLICT(url) DO UPDATE SET
+      title=excluded.title, description=excluded.description, icon_url=excluded.icon_url,
+      keywords=excluded.keywords, snippet=excluded.snippet, updated_at=CURRENT_TIMESTAMP
+  `).run(meta.url, meta.title, meta.description, meta.iconUrl, meta.keywords, meta.snippet);
+}
+function removeFromQueue(pageId) {
+  db.prepare('DELETE FROM crawl_observations WHERE target_id IN (SELECT id FROM crawl_targets WHERE page_id=?)').run(pageId);
+  db.prepare('DELETE FROM crawl_targets WHERE page_id=?').run(pageId);
+  db.prepare('DELETE FROM site_pages WHERE id=?').run(pageId);
+}
+function markNeedsReview(page, result) {
+  db.prepare(`UPDATE site_pages SET crawl_status='needs_review', http_status=?, description=?, content_hash=? WHERE id=?`)
+    .run(result.status || null, result.error || 'بيانات ناقصة أو فشل الجلب', '', page.id);
+}
+function markCorrupt(page, result) {
+  db.prepare(`UPDATE site_pages SET crawl_status='corrupt', http_status=?, description=? WHERE id=?`)
+    .run(result.status || null, result.error || 'فشل بعد المحاولة الأخيرة', page.id);
+  removeFromQueue(page.id);
+}
+
+export async function run(type = 'manual') {
+  const runId = createRun(type);
+  const browserState = { active: 0, limit: 7, waiters: [] };
+  const { targets, phase } = acquireBatch(runId);
+  let success = 0; let review = 0; let corrupt = 0;
+  const fetched = await mapLimit(targets, (page) => fetchOne(page.url, browserState), concurrency);
+  for (let i = 0; i < targets.length; i += 1) {
+    const page = targets[i];
+    const result = fetched[i];
+    let meta = null;
+    try { meta = compactMeta(result); } catch { meta = null; }
+    if (meta && isComplete(result, meta)) {
+      saveSuccessful(meta);
+      removeFromQueue(page.id);
+      success += 1;
+    } else if (phase === 'review' || (page.crawl_attempts || 0) >= retryLimit + 1) {
+      markCorrupt(page, result);
+      corrupt += 1;
+    } else {
+      markNeedsReview(page, result);
+      review += 1;
+    }
+  }
+  db.prepare(`UPDATE crawl_runs SET status='completed',finished_at=CURRENT_TIMESTAMP,processed_count=?,success_count=?,failed_count=? WHERE id=?`).run(targets.length, success, review + corrupt, runId);
+  return { runId, phase, total: targets.length, success, needs_review: review, corrupt, batch_size: batchSize, concurrency, retries, fetch_mode: fetchMode };
+}

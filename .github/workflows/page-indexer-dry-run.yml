@@ -31,7 +31,7 @@ jobs:
       CRAWLER_FETCH_MODE: hybrid
       CRAWLER_LIGHT_MODE: '1'
       CRAWLER_CONCURRENCY: '10'
-      CRAWLER_BROWSER_CONCURRENCY: '7'
+      CRAWLER_BROWSER_CONCURRENCY: '10'
       CRAWLER_BROWSER_BUDGET_MS: '15000'
       CRAWLER_PAGE_TIMEOUT_MS: '120000'
       CRAWLER_RETRIES: '1'
@@ -65,7 +65,7 @@ jobs:
         run: node tools/validate-staging.mjs 2>&1 | tee /tmp/temporary-validation.log
       - name: Export requested index fields only
         if: always()
-        run: node tools/export-index-json.mjs /tmp/crawler-results.sqlite /tmp/index-results.json
+        run: node tools/export-index-json.mjs /tmp/crawler-links.sqlite /tmp/index-results.json
       - name: Upload temporary results and logs
         if: always()
         uses: actions/upload-artifact@v4
