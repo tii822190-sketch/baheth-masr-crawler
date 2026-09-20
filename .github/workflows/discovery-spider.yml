@@ -2,11 +2,8 @@ name: Discovery Spider
 
 on:
   workflow_dispatch:
-    inputs:
-      resume_incomplete:
-        description: Resume one incomplete site from its saved cursor
-        required: false
-        default: 'false'
+  schedule:
+    - cron: '0 0,8,16 * * *'
 
 permissions:
   contents: write
@@ -24,7 +21,7 @@ jobs:
       DISCOVERY_MAX_PAGES_PER_SITE: '10000'
       DISCOVERY_MAX_SITEMAPS: '2000'
       DISCOVERY_TIMEOUT_MS: '20000'
-      DISCOVERY_RESUME_INCOMPLETE: ${{ inputs.resume_incomplete || 'false' }}
+      DISCOVERY_RESUME_INCOMPLETE: 'false'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -39,6 +36,17 @@ jobs:
         run: node crawler/src/cli.mjs init
       - name: Discover one pending site from all sitemaps
         run: node tools/discovery-spider.mjs
+      - name: Verify local database
+        run: |
+          node --input-type=module <<'NODE'
+          import Database from 'better-sqlite3';
+          const db = new Database('db/crawler.sqlite', { readonly: true });
+          const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name").all().map((row) => row.name);
+          if (tables.join(',') !== 'index_results,site_pages,sites') throw new Error(`Unexpected tables: ${tables.join(',')}`);
+          if (db.prepare('PRAGMA integrity_check').get().integrity_check !== 'ok') throw new Error('Database integrity check failed');
+          console.log(JSON.stringify({ tables, sites: db.prepare('SELECT COUNT(*) AS count FROM sites').get().count, queued_pages: db.prepare('SELECT COUNT(*) AS count FROM site_pages').get().count }, null, 2));
+          db.close();
+          NODE
       - name: Save local crawler database
         run: |
           git config user.name "github-actions[bot]"
@@ -47,6 +55,6 @@ jobs:
           if git diff --cached --quiet; then
             echo "No database changes to commit."
           else
-            git commit -m "Update local crawler database"
+            git commit -m "Run discovery spider and update local database"
             git push origin HEAD:main
           fi

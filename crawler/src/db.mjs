@@ -10,11 +10,8 @@ export const db = new Database(inputPath);
 export const resultsDb = db;
 db.pragma('foreign_keys = ON');
 
-function tableExists(name) {
-  return Boolean(db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(name));
-}
 function columns(name) {
-  return tableExists(name) ? db.prepare(`PRAGMA table_info(${name})`).all().map((row) => row.name) : [];
+  return db.prepare(`PRAGMA table_info(${name})`).all().map((row) => row.name);
 }
 function createCoreTables() {
   db.exec(`
@@ -52,17 +49,7 @@ function createCoreTables() {
 }
 
 export function initDb() {
-  db.pragma('foreign_keys = OFF');
   createCoreTables();
-  if (tableExists('pages_queue')) {
-    db.exec(`INSERT OR IGNORE INTO site_pages (site_id,url,crawl_status,crawl_attempts)
-      SELECT site_id,url,CASE WHEN indexed=1 THEN 'crawled' ELSE 'pending' END,0 FROM pages_queue`);
-    db.exec('DROP TABLE pages_queue');
-  }
-  for (const table of ['crawl_quarantine','crawl_review_items','crawl_results','crawl_discoveries','crawl_observations','crawl_targets','crawl_runs','discovery_sitemap_cursor','discovery_queue']) {
-    if (tableExists(table)) db.exec(`DROP TABLE ${table}`);
-  }
-  db.pragma('foreign_keys = ON');
   const integrity = db.prepare('PRAGMA integrity_check').get().integrity_check;
   if (integrity !== 'ok') throw new Error(`Database integrity check failed: ${integrity}`);
 }

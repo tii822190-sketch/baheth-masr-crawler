@@ -77,7 +77,7 @@ async function httpFetch(url) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), pageTimeoutMs);
   try {
-    const response = await fetch(url, { signal: controller.signal, redirect: 'follow', headers: { 'user-agent': 'BahethMasrCrawler/1.0 (+staging)' } });
+    const response = await fetch(url, { signal: controller.signal, redirect: 'follow', headers: { 'user-agent': 'BahethMasrCrawler/1.0' } });
     return { url, responseUrl: response.url || url, status: response.status, contentType: response.headers.get('content-type') || '', body: await response.text(), duration: Date.now() - started, method: 'http' };
   } finally {
     clearTimeout(timer);

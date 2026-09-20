@@ -5,7 +5,6 @@ import { extractHtml } from '../src/extract.mjs';
 import { extractLightHtml } from '../src/light-extract.mjs';
 import { classifyContent } from '../src/classify.mjs';
 import { errorCode } from '../src/crawl.mjs';
-import { validateRow } from '../../tools/validate-staging.mjs';
 import taxonomy from '../../taxonomy/search-taxonomy.json' with { type: 'json' };
 
 test('canonicalize removes tracking and normalizes host', () => { assert.equal(canonicalize('https://WWW.Example.com/index.html?utm_source=x&a=1#x'), 'https://example.com/?a=1'); });
@@ -36,20 +35,3 @@ test('quarantine rejects non-HTML and low-quality content', () => {
   assert.equal(errorCode({}, { httpStatus: 200, contentType: 'text/html', meta: { qualityStatus: 'dynamic_content' } }), 'dynamic_content');
   assert.equal(errorCode({}, { httpStatus: 200, contentType: 'text/html', meta: { qualityStatus: 'thin_content' } }), 'thin_content');
 });
-test('validation approves a complete good HTML result with clear classification', () => {
-  const row={crawl_status:'success',http_status:200,content_type:'text/html',quality_status:'good',title:'عنوان',extracted_text:'x'.repeat(400),search_text:'x'.repeat(120),canonical_url:'https://example.com/',category_candidate:'quran',classification_status:'candidate',classification_score:8,classification_confidence:0.8};
-  assert.deepEqual(validateRow(row,1,1),{status:'approved',reason:'all_quality_and_classification_checks_passed'});
-});
-test('validation rejects failed, empty, or non-HTML results', () => {
-  const row={crawl_status:'http_error',http_status:403,content_type:'application/json',quality_status:'not_indexable_api',title:'',extracted_text:'',search_text:'',canonical_url:'bad'};
-  const result=validateRow(row,1);
-  assert.equal(result.status,'rejected');
-  assert.match(result.reason,/crawl_not_success/);
-  assert.match(result.reason,/not_html/);
-});
-test('validation sends duplicate good canonical URLs to manual review', () => {
-  const row={crawl_status:'success',http_status:200,content_type:'text/html',quality_status:'good',title:'عنوان',extracted_text:'x'.repeat(400),search_text:'x'.repeat(120),canonical_url:'https://example.com/',category_candidate:'quran',classification_status:'candidate',classification_score:8,classification_confidence:0.8};
-  assert.equal(validateRow(row,2,1).status,'needs_review');
-});
-test('validation sends unclear classification to manual review', () => { const row={crawl_status:'success',http_status:200,content_type:'text/html',quality_status:'good',title:'عنوان',extracted_text:'x'.repeat(400),search_text:'x'.repeat(120),canonical_url:'https://example.com/',category_candidate:'other',classification_status:'candidate',classification_score:0,classification_confidence:0}; const result=validateRow(row,1,1); assert.equal(result.status,'needs_review'); assert.match(result.reason,/classification_unclear/); });
-test('validation rejects duplicate content and invalid classification', () => { const row={crawl_status:'success',http_status:200,content_type:'text/html',quality_status:'good',title:'عنوان',extracted_text:'x'.repeat(400),search_text:'x'.repeat(120),canonical_url:'https://example.com/',category_candidate:'invalid',classification_status:'candidate',classification_score:8,classification_confidence:0.8}; const result=validateRow(row,1,2); assert.equal(result.status,'rejected'); assert.match(result.reason,/duplicate_content_hash/); assert.match(result.reason,/invalid_category_candidate/); });

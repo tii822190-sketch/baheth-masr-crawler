@@ -6,13 +6,15 @@ on:
       batch_size:
         description: Pages per batch
         required: false
-        default: '20'
+        default: '500'
+        type: string
       max_pages:
         description: Maximum pages per run
         required: false
-        default: '20'
+        default: '500'
+        type: string
   schedule:
-    - cron: '0 3,6,10,15,20,23 * * *'
+    - cron: '0 * * * *'
 
 concurrency:
   group: baheth-local-crawler-db
@@ -27,10 +29,9 @@ jobs:
     timeout-minutes: 120
     env:
       CRAWLER_INPUT_DB_PATH: db/crawler.sqlite
-      CRAWLER_SOURCE: unindexed_pages
       CRAWLER_FETCH_MODE: hybrid
-      CRAWLER_BATCH_SIZE: ${{ inputs.batch_size || '20' }}
-      CRAWLER_MAX_PAGES: ${{ inputs.max_pages || '20' }}
+      CRAWLER_BATCH_SIZE: ${{ inputs.batch_size || '500' }}
+      CRAWLER_MAX_PAGES: ${{ inputs.max_pages || '500' }}
       CRAWLER_CONCURRENCY: '10'
       CRAWLER_BROWSER_CONCURRENCY: '10'
       CRAWLER_BROWSER_BUDGET_MS: '15000'
@@ -47,9 +48,9 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - name: Initialize the three-table local database
+      - name: Initialize the local three-table database
         run: node crawler/src/cli.mjs init
-      - name: Run the primary crawler in batches
+      - name: Run up to 500 queued pages
         run: |
           set -e
           processed_pages=0
@@ -73,7 +74,7 @@ jobs:
           const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name").all().map((row) => row.name);
           if (tables.join(',') !== 'index_results,site_pages,sites') throw new Error(`Unexpected tables: ${tables.join(',')}`);
           if (db.prepare('PRAGMA integrity_check').get().integrity_check !== 'ok') throw new Error('Database integrity check failed');
-          console.log(JSON.stringify({ tables, index_results: db.prepare('SELECT COUNT(*) AS count FROM index_results').get().count, queued_pages: db.prepare("SELECT COUNT(*) AS count FROM site_pages WHERE crawl_status IN ('pending','queued','needs_review')").get().count }, null, 2));
+          console.log(JSON.stringify({ tables, index_results: db.prepare('SELECT COUNT(*) AS count FROM index_results').get().count, queued_pages: db.prepare('SELECT COUNT(*) AS count FROM site_pages').get().count }, null, 2));
           db.close();
           NODE
       - name: Commit updated local database
