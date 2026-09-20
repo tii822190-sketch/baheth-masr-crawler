@@ -14,6 +14,7 @@ const retryLimit = Math.max(1, Number(process.env.CRAWLER_REVIEW_RETRIES || 1));
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function acquireBatch() {
+  db.prepare("UPDATE site_pages SET crawl_status='pending' WHERE crawl_status='processing'").run();
   const pending = db.prepare(`
     SELECT id,site_id,url,crawl_status,crawl_attempts
     FROM site_pages
