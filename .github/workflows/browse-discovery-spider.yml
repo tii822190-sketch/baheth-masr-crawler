@@ -24,7 +24,8 @@ jobs:
       CRAWLER_DB_PATH: db/crawler.sqlite
       BROWSE_MAX_PAGES: ${{ inputs.max_pages || '10000' }}
       BROWSE_PAGE_TIMEOUT_MS: '30000'
-      BROWSE_BROWSER_BUDGET_MS: '10000'
+      BROWSE_BROWSER_BUDGET_MS: '30000'
+      BROWSE_SCROLL_STEPS: '6'
     steps:
       - uses: actions/checkout@v4
         with:

@@ -5,7 +5,8 @@ import * as cheerio from 'cheerio';
 const DB_PATH = process.env.CRAWLER_DB_PATH || 'db/crawler.sqlite';
 const MAX_PAGES = Math.max(1, Number(process.env.BROWSE_MAX_PAGES || 10000));
 const PAGE_TIMEOUT_MS = Math.max(5000, Number(process.env.BROWSE_PAGE_TIMEOUT_MS || 30000));
-const BROWSER_BUDGET_MS = Math.max(1000, Number(process.env.BROWSE_BROWSER_BUDGET_MS || 10000));
+const BROWSER_BUDGET_MS = Math.max(1000, Number(process.env.BROWSE_BROWSER_BUDGET_MS || 30000));
+const BROWSER_SCROLL_STEPS = Math.max(1, Number(process.env.BROWSE_SCROLL_STEPS || 6));
 const db = new Database(DB_PATH);
 db.pragma('foreign_keys = ON');
 
@@ -59,6 +60,67 @@ function extractLinks(html, siteUrl) {
   });
   return [...links.values()];
 }
+function sleep(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
+async function renderInteractive(url) {
+  return new Promise((resolve) => {
+    const child = spawn('/usr/bin/chromium', [
+      '--headless=new', '--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage',
+      '--remote-debugging-port=0', '--remote-allow-origins=*', '--no-first-run', '--no-default-browser-check',
+    ], { stdio: ['ignore', 'ignore', 'pipe'] });
+    let stderr = '';
+    let settled = false;
+    let connecting = false;
+    const finish = (html = '') => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      try { child.kill('SIGKILL'); } catch {}
+      resolve(html);
+    };
+    const timer = setTimeout(() => finish(''), PAGE_TIMEOUT_MS);
+    child.stderr.on('data', async (chunk) => {
+      stderr += chunk.toString();
+      const match = stderr.match(/DevTools listening on (ws:\/\/127\.0\.0\.1:(\d+)\/[^\s]+)/);
+      if (!match || settled || connecting) return;
+      connecting = true;
+      try {
+        const targets = await fetch(`http://127.0.0.1:${match[2]}/json/list`).then((response) => response.json());
+        const target = targets.find((item) => item.type === 'page' && item.webSocketDebuggerUrl);
+        if (!target) return finish('');
+        const socket = new WebSocket(target.webSocketDebuggerUrl);
+        let nextId = 0;
+        const pending = new Map();
+        socket.onmessage = (event) => {
+          const message = JSON.parse(event.data);
+          const callback = pending.get(message.id);
+          if (callback) { pending.delete(message.id); callback(message); }
+        };
+        const command = (method, params = {}) => new Promise((resolveCommand, reject) => {
+          const id = ++nextId;
+          pending.set(id, (message) => message.error ? reject(new Error(message.error.message)) : resolveCommand(message));
+          socket.send(JSON.stringify({ id, method, params }));
+        });
+        socket.onopen = async () => {
+          try {
+            await command('Page.enable');
+            await command('Runtime.enable');
+            await command('Page.navigate', { url });
+            await sleep(BROWSER_BUDGET_MS);
+            const expression = `(async()=>{for(let i=0;i<${BROWSER_SCROLL_STEPS};i++){window.scrollTo(0,document.body.scrollHeight);await new Promise(r=>setTimeout(r,1000));}window.scrollTo(0,0);return document.documentElement.outerHTML;})()`;
+            const result = await command('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true });
+            socket.close();
+            finish(result.result?.result?.value || '');
+          } catch { try { socket.close(); } catch {} finish(''); }
+        };
+        socket.onerror = () => finish('');
+      } catch (error) {
+        if (process.env.BROWSE_DEBUG) console.error(`interactive_browser_error: ${error.message}`);
+        finish('');
+      }
+    });
+    child.on('error', () => finish(''));
+  });
+}
 async function render(url) {
   let rawHtml = '';
   try {
@@ -70,23 +132,8 @@ async function render(url) {
     if ((rawHtml.match(/<a\b[^>]*href=/gi) || []).length > 0) return rawHtml;
   } catch {}
 
-  return new Promise((resolve) => {
-    const child = spawn('/usr/bin/chromium', [
-      '--headless=new', '--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage',
-      `--virtual-time-budget=${BROWSER_BUDGET_MS}`, '--run-all-compositor-stages-before-draw', '--dump-dom', url,
-    ], { stdio: ['ignore', 'pipe', 'ignore'] });
-    let html = '';
-    const timer = setTimeout(() => { child.kill('SIGKILL'); }, PAGE_TIMEOUT_MS);
-    child.stdout.on('data', (chunk) => { html += chunk; });
-    child.on('close', async (code) => {
-      clearTimeout(timer);
-      // Chromium can finish with a non-zero code after emitting usable DOM,
-      // but it can also emit an incomplete error document with no links. Use
-      // rendered DOM when it contains links; otherwise try the raw response.
-      if ((html.match(/<a\b[^>]*href=/gi) || []).length > 0) return resolve(html);
-      resolve(rawHtml || html);
-    });
-  });
+  const browserHtml = await renderInteractive(url);
+  return browserHtml || rawHtml;
 }
 async function browseSite(site) {
   const homepage = pageUrl(site.url, site.url);
