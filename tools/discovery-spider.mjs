@@ -5,7 +5,6 @@ const DB_PATH = process.env.CRAWLER_DB_PATH || 'db/crawler.sqlite';
 const MAX_PAGES_PER_SITE = Math.max(1, Number(process.env.DISCOVERY_MAX_PAGES_PER_SITE || 10000));
 const REQUEST_TIMEOUT_MS = Math.max(1000, Number(process.env.DISCOVERY_TIMEOUT_MS || 20000));
 const MAX_SITEMAPS = Math.max(1, Number(process.env.DISCOVERY_MAX_SITEMAPS || 2000));
-const VALIDATE_CONCURRENCY = Math.max(1, Math.min(20, Number(process.env.DISCOVERY_VALIDATE_CONCURRENCY || 10)));
 const RESUME_INCOMPLETE = /^(1|true|yes)$/i.test(process.env.DISCOVERY_RESUME_INCOMPLETE || '');
 const db = new Database(DB_PATH);
 db.pragma('foreign_keys = ON');
@@ -64,14 +63,6 @@ async function fetchBytes(url) {
     return bytes.toString('utf8');
   } catch { return null; }
 }
-async function validPage(url) {
-  const head = await fetchResponse(url, 'HEAD');
-  if (head && [404, 410].includes(head.status)) return false;
-  if (head && head.ok) return true;
-  if (head && ![405, 403, 501].includes(head.status)) return false;
-  const get = await fetchResponse(url, 'GET');
-  return Boolean(get && ![404, 410].includes(get.status) && get.ok);
-}
 async function mapLimit(items, worker, limit) {
   const out = new Array(items.length); let cursor = 0;
   async function consume() { while (true) { const i = cursor++; if (i >= items.length) return; out[i] = await worker(items[i], i); } }
@@ -103,7 +94,7 @@ function saveCursor(siteId, cursor) { db.prepare('UPDATE sites SET discovery_cur
 
 async function discoverSite(site) {
   const existing = db.prepare('SELECT COUNT(*) AS count FROM site_pages WHERE site_id=?').get(site.id).count;
-  let totalAccepted = existing; let pagesAdded = 0; let rejected404 = 0; let rejectedInvalid = 0; let sitemapCount = 0;
+  let totalAccepted = existing; let pagesAdded = 0; let sitemapCount = 0;
   const cursor = parseCursor(site.discovery_cursor, site.url);
   const seen = new Set(cursor.seenSitemaps);
   const pending = [...cursor.pendingSitemaps];
@@ -123,11 +114,9 @@ async function discoverSite(site) {
     const allowed = Math.max(0, MAX_PAGES_PER_SITE - totalAccepted);
     if (allowed === 0) { saveCursor(site.id, { pendingSitemaps: pending, seenSitemaps: [...seen], currentSitemap: current, currentPageIndex: pageIndex }); break; }
     const candidates = pageSlice.slice(0, allowed);
-    const checks = await mapLimit(candidates, validPage, VALIDATE_CONCURRENCY);
-    const insert = db.prepare('INSERT OR IGNORE INTO site_pages (site_id,url,crawl_status,crawl_attempts) VALUES (?,? ,\'pending\',0)');
+    const insert = db.prepare("INSERT OR IGNORE INTO site_pages (site_id,url,crawl_status,crawl_attempts) VALUES (?,? ,'pending',0)");
     for (let i = 0; i < candidates.length; i += 1) {
       const page = candidates[i];
-      if (!checks[i]) { rejected404 += 1; continue; }
       const result = insert.run(site.id, page); if (result.changes) { pagesAdded += 1; totalAccepted += 1; }
     }
     pageIndex += candidates.length;
@@ -141,7 +130,7 @@ async function discoverSite(site) {
   const status = incomplete ? 'incomplete' : 'completed';
   const finalCursor = { pendingSitemaps: pending, seenSitemaps: [...seen], currentSitemap: current || lastCompletedSitemap, currentPageIndex: current ? pageIndex : lastCompletedPageIndex };
   db.prepare('UPDATE sites SET crawl_status=?,discovery_cursor=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(status, JSON.stringify(finalCursor), site.id);
-  return { site_id: site.id, site: site.url, status, sitemaps_scanned: sitemapCount, pages_added: pagesAdded, pages_total: totalAccepted, max_pages: MAX_PAGES_PER_SITE, rejected_404_or_unreachable: rejected404, rejected_invalid: rejectedInvalid, resume_point_saved: incomplete };
+  return { site_id: site.id, site: site.url, status, sitemaps_scanned: sitemapCount, pages_added: pagesAdded, pages_total: totalAccepted, max_pages: MAX_PAGES_PER_SITE, resume_point_saved: incomplete, validation: 'deferred_to_crawler' };
 }
 
 const requestedSite = canonicalize(process.env.DISCOVERY_SITE_URL || '');
