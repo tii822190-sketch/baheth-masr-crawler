@@ -1,7 +1,6 @@
 name: Page Indexer
+
 on:
-  schedule:
-    - cron: '0 3,6,10,15,20,23 * * *'
   workflow_dispatch:
     inputs:
       batch_size:
@@ -12,110 +11,73 @@ on:
         description: Maximum pages per run
         required: false
         default: '20'
-      sync_production:
-        description: Sync approved rows to production after validation
-        required: false
-        default: 'true'
-        type: boolean
+  schedule:
+    - cron: '0 3,6,10,15,20,23 * * *'
+
 concurrency:
-  group: baheth-crawler-staging-write
+  group: baheth-local-crawler-db
   cancel-in-progress: false
+
 permissions:
-  contents: read
+  contents: write
+
 jobs:
   index:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
-      TURSO_CRAWLER_DATABASE_URL: libsql://alzahf-karamkkr.aws-eu-west-1.turso.io
-      TURSO_CRAWLER_AUTH_TOKEN: ${{ secrets.TURSO_CRAWLER_AUTH_TOKEN }}
-      TURSO_PRODUCTION_DATABASE_URL: ${{ secrets.TURSO_PRODUCTION_DATABASE_URL }}
-      TURSO_PRODUCTION_AUTH_TOKEN: ${{ secrets.TURSO_PRODUCTION_AUTH_TOKEN }}
-      CRAWLER_INPUT_DB_PATH: db/links.sqlite
-      CRAWLER_RESULTS_DB_PATH: db/results.sqlite
+      CRAWLER_INPUT_DB_PATH: db/crawler.sqlite
       CRAWLER_SOURCE: unindexed_pages
-      CRAWLER_SEED_STAGING: '0'
-      CRAWLER_DISCOVERY_MODE: '0'
-      CRAWLER_MANUAL_ONLY: '1'
       CRAWLER_FETCH_MODE: hybrid
-      CRAWLER_LIGHT_MODE: '1'
+      CRAWLER_BATCH_SIZE: ${{ inputs.batch_size || '20' }}
+      CRAWLER_MAX_PAGES: ${{ inputs.max_pages || '20' }}
       CRAWLER_CONCURRENCY: '10'
       CRAWLER_BROWSER_CONCURRENCY: '10'
       CRAWLER_BROWSER_BUDGET_MS: '15000'
       CRAWLER_PAGE_TIMEOUT_MS: '120000'
       CRAWLER_RETRIES: '1'
-      CRAWLER_DRAIN_DISCOVERIES: '0'
-      CRAWLER_ONE_BATCH: '1'
-      CRAWLER_RETRY_FAILED: '0'
-      CRAWLER_BATCH_SIZE: ${{ inputs.batch_size || '20' }}
-      CRAWLER_MAX_PAGES: ${{ inputs.max_pages || '20' }}
-      SYNC_PRODUCTION: ${{ inputs.sync_production || 'true' }}
+      CRAWLER_REVIEW_RETRIES: '1'
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
+        with:
+          node-version: 22
+          cache: npm
       - run: npm ci
-      - run: node tools/apply-turso-schema.mjs
-      - run: rm -f db/links.sqlite db/results.sqlite
-      - run: node crawler/src/cli.mjs init
-      - run: node tools/clear-local-staging.mjs
-      - run: node tools/restore-turso-staging.mjs
-      - name: Acquire staging write lock
-        run: node tools/turso-job-lock.mjs acquire
-      - name: Index pages from site_pages only
+      - name: Initialize the three-table local database
+        run: node crawler/src/cli.mjs init
+      - name: Run the primary crawler
+        run: node crawler/src/cli.mjs manual | tee /tmp/primary-crawler-result.json
+      - name: Verify local database
         run: |
-          set -e
-          processed_pages=0
-          batch_number=0
-          started_at=$(date +%s)
-          while [ "$processed_pages" -lt "$CRAWLER_MAX_PAGES" ]; do
-            batch_number=$((batch_number + 1))
-            remaining=$((CRAWLER_MAX_PAGES - processed_pages))
-            current_batch_size=$CRAWLER_BATCH_SIZE
-            if [ "$current_batch_size" -gt "$remaining" ]; then current_batch_size=$remaining; fi
-            export CRAWLER_BATCH_SIZE="$current_batch_size"
-            batch_started_at=$(date +%s)
-            echo "::notice::Starting batch ${batch_number}; batch_size=${current_batch_size}; processed=${processed_pages}/${CRAWLER_MAX_PAGES}; page_timeout=${CRAWLER_PAGE_TIMEOUT_MS}ms; request_concurrency=${CRAWLER_CONCURRENCY}; browser_concurrency=${CRAWLER_BROWSER_CONCURRENCY}"
-            node tools/turso-job-lock.mjs heartbeat
-            output=$(node crawler/src/cli.mjs manual)
-            echo "$output"
-            export CRAWLER_SYNC_RUN_ID=$(node -e "const x=JSON.parse(process.argv[1]); console.log(Number(x.runId)||0)" "$output")
-            processed=$(node -e "const x=JSON.parse(process.argv[1]); console.log(Number(x.total)||0)" "$output")
-            processed_pages=$((processed_pages + processed))
-            batch_elapsed=$(( $(date +%s) - batch_started_at ))
-            total_elapsed=$(( $(date +%s) - started_at ))
-            echo "::notice::Finished batch ${batch_number}; batch_processed=${processed}; total_processed=${processed_pages}/${CRAWLER_MAX_PAGES}; batch_elapsed=${batch_elapsed}s; total_elapsed=${total_elapsed}s"
-            if ! validation=$(node tools/validate-staging.mjs 2>&1); then
-              echo "Validation completed with non-blocking row-level issues:"
-              echo "$validation"
-            else
-              echo "$validation"
-            fi
-            node tools/sync-turso-staging.mjs
-            if [ "$SYNC_PRODUCTION" = "true" ]; then
-              sync_status=0
-              sync=$(node tools/sync-approved-production.mjs 2>&1) || sync_status=$?
-              echo "$sync"
-              if [ "$sync_status" -ne 0 ]; then
-                echo "Production sync returned non-zero status $sync_status; retaining staging results for the next scheduled run."
-              else
-                echo "Production sync completed."
-                node tools/mark-synced-staging.mjs
-                node tools/sync-turso-staging.mjs
-              fi
-            else
-              echo "Production sync disabled for this run; results remain in staging."
-            fi
-            node tools/turso-job-lock.mjs heartbeat
-            if [ "$processed" -eq 0 ]; then
-              break
-            fi
-          done
-      - name: Release staging write lock
-        if: always()
-        run: node tools/turso-job-lock.mjs release || true
+          node --input-type=module <<'NODE'
+          import Database from 'better-sqlite3';
+          const db = new Database('db/crawler.sqlite', { readonly: true });
+          const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name").all().map((row) => row.name);
+          if (tables.join(',') !== 'index_results,site_pages,sites') throw new Error(`Unexpected tables: ${tables.join(',')}`);
+          if (db.prepare('PRAGMA integrity_check').get().integrity_check !== 'ok') throw new Error('Database integrity check failed');
+          console.log(JSON.stringify({ tables, index_results: db.prepare('SELECT COUNT(*) AS count FROM index_results').get().count, queued_pages: db.prepare("SELECT COUNT(*) AS count FROM site_pages WHERE crawl_status IN ('pending','queued','needs_review')").get().count }, null, 2));
+          db.close();
+          NODE
+      - name: Commit updated local database
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add db/crawler.sqlite
+          if git diff --cached --quiet; then
+            echo "No database changes to commit."
+          else
+            git commit -m "Run primary crawler and update local database"
+            git push origin HEAD:main
+          fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: page-indexer-${{ github.run_id }}
-          path: db/*.sqlite
+          path: |
+            db/crawler.sqlite
+            /tmp/primary-crawler-result.json
+          retention-days: 7

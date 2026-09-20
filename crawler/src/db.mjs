@@ -5,38 +5,64 @@ import Database from 'better-sqlite3';
 const root = path.resolve(new URL('../..', import.meta.url).pathname);
 const dbDir = path.join(root, 'db');
 fs.mkdirSync(dbDir, { recursive: true });
-const inputPath = process.env.CRAWLER_INPUT_DB_PATH || path.join(dbDir, 'links.sqlite');
-const resultsPath = process.env.CRAWLER_RESULTS_DB_PATH || path.join(dbDir, 'results.sqlite');
+const inputPath = process.env.CRAWLER_INPUT_DB_PATH || path.join(dbDir, 'crawler.sqlite');
 export const db = new Database(inputPath);
-export const resultsDb = new Database(resultsPath);
+export const resultsDb = db;
 db.pragma('foreign_keys = ON');
-resultsDb.pragma('foreign_keys = ON');
 
-function execMigration(database, filename) {
-  const sql = fs.readFileSync(path.join(root, 'migrations', filename), 'utf8');
-  try {
-    database.exec(sql);
-  } catch (error) {
-    if (!/duplicate column name|already exists/i.test(String(error))) throw error;
-  }
+function tableExists(name) {
+  return Boolean(db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(name));
+}
+function columns(name) {
+  return tableExists(name) ? db.prepare(`PRAGMA table_info(${name})`).all().map((row) => row.name) : [];
+}
+function createCoreTables() {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS sites (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      url TEXT NOT NULL UNIQUE,
+      crawl_status TEXT NOT NULL DEFAULT 'pending',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS site_pages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+      url TEXT NOT NULL UNIQUE,
+      crawl_status TEXT NOT NULL DEFAULT 'pending',
+      crawl_attempts INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE TABLE IF NOT EXISTS index_results (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      url TEXT NOT NULL UNIQUE,
+      title TEXT NOT NULL DEFAULT '',
+      description TEXT NOT NULL DEFAULT '',
+      icon_url TEXT NOT NULL DEFAULT '',
+      keywords TEXT NOT NULL DEFAULT '',
+      snippet TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_site_pages_status ON site_pages(crawl_status,id);
+    CREATE INDEX IF NOT EXISTS idx_site_pages_site ON site_pages(site_id,id);
+    CREATE INDEX IF NOT EXISTS idx_index_results_url ON index_results(url);
+  `);
 }
 
 export function initDb() {
-  db.exec(fs.readFileSync(path.join(root, 'migrations/001_crawler_staging.sql'), 'utf8'));
-  for (const migration of ['007_discovery_monitoring.sql', '008_discovery_queue.sql', '009_job_locks.sql', '010_discovery_sitemap_cursor.sql']) {
-    for (const statement of fs.readFileSync(path.join(root, 'migrations', migration), 'utf8').split(';').map((x) => x.trim()).filter(Boolean)) {
-      try { db.exec(statement); } catch (error) { if (!/duplicate column name|already exists/i.test(String(error))) throw error; }
-    }
+  db.pragma('foreign_keys = OFF');
+  createCoreTables();
+  if (tableExists('pages_queue')) {
+    db.exec(`INSERT OR IGNORE INTO site_pages (site_id,url,crawl_status,crawl_attempts)
+      SELECT site_id,url,CASE WHEN indexed=1 THEN 'crawled' ELSE 'pending' END,0 FROM pages_queue`);
+    db.exec('DROP TABLE pages_queue');
   }
-  execMigration(db, '011_index_results.sql');
-  execMigration(db, '012_queue_attempts.sql');
-  if (process.env.CRAWLER_SEED_STAGING === '1' && fs.existsSync(path.join(root, 'db/seed-staging.sql'))) db.exec(fs.readFileSync(path.join(root, 'db/seed-staging.sql'), 'utf8'));
-  resultsDb.exec(fs.readFileSync(path.join(root, 'migrations/002_crawler_results.sql'), 'utf8'));
-  for (const migration of ['003_distribution.sql', '004_validation.sql', '005_classification.sql']) {
-    for (const statement of fs.readFileSync(path.join(root, 'migrations', migration), 'utf8').split(';').map((x) => x.trim()).filter(Boolean)) {
-      try { resultsDb.exec(statement); } catch (error) { if (!/duplicate column name|already exists/i.test(String(error))) throw error; }
-    }
+  for (const table of ['crawl_quarantine','crawl_review_items','crawl_results','crawl_discoveries','crawl_observations','crawl_targets','crawl_runs','discovery_sitemap_cursor','discovery_queue']) {
+    if (tableExists(table)) db.exec(`DROP TABLE ${table}`);
   }
+  db.pragma('foreign_keys = ON');
+  const integrity = db.prepare('PRAGMA integrity_check').get().integrity_check;
+  if (integrity !== 'ok') throw new Error(`Database integrity check failed: ${integrity}`);
 }
 
 export function canonicalize(raw) {
@@ -49,7 +75,7 @@ export function canonicalize(raw) {
     if ((u.protocol === 'https:' && u.port === '443') || (u.protocol === 'http:' && u.port === '80')) u.port = '';
     u.pathname = u.pathname.replace(/\/index\.(html?|php)$/i, '/') || '/';
     if (u.pathname.length > 1) u.pathname = u.pathname.replace(/\/+$/, '');
-    [...u.searchParams.keys()].filter((k) => /^(utm_|fbclid|gclid)/i.test(k)).forEach((k) => u.searchParams.delete(k));
+    [...u.searchParams.keys()].filter((key) => /^(utm_|fbclid|gclid)/i.test(key)).forEach((key) => u.searchParams.delete(key));
     return u.toString();
   } catch {
     return '';

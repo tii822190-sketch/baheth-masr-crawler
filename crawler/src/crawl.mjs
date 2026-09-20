@@ -13,11 +13,7 @@ const fetchMode = process.env.CRAWLER_FETCH_MODE || 'hybrid';
 const retryLimit = Math.max(1, Number(process.env.CRAWLER_REVIEW_RETRIES || 1));
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-function createRun(type) {
-  return db.prepare(`INSERT INTO crawl_runs (run_type,status,started_at,target_count) VALUES (?, 'running', CURRENT_TIMESTAMP, 0)`).run(type).lastInsertRowid;
-}
-
-function acquireBatch(runId) {
+function acquireBatch() {
   const pending = db.prepare(`
     SELECT id,site_id,url,crawl_status,crawl_attempts
     FROM site_pages
@@ -34,12 +30,10 @@ function acquireBatch(runId) {
     LIMIT ?
   `).all(retryLimit + 1, Math.min(batchSize, maxPages));
   if (!candidates.length) {
-    db.prepare('UPDATE crawl_runs SET target_count=0 WHERE id=?').run(runId);
     return { targets: [], phase: pending.length ? 'pending' : 'review' };
   }
   const mark = db.prepare(`UPDATE site_pages SET crawl_status='processing', crawl_attempts=COALESCE(crawl_attempts,0)+1 WHERE id=?`);
   for (const page of candidates) mark.run(page.id);
-  db.prepare('UPDATE crawl_runs SET target_count=? WHERE id=?').run(candidates.length, runId);
   return { targets: candidates, phase: pending.length ? 'pending' : 'review' };
 }
 
@@ -163,24 +157,19 @@ function saveSuccessful(meta) {
   `).run(meta.url, meta.title, meta.description, meta.iconUrl, meta.keywords, meta.snippet);
 }
 function removeFromQueue(pageId) {
-  db.prepare('DELETE FROM crawl_observations WHERE target_id IN (SELECT id FROM crawl_targets WHERE page_id=?)').run(pageId);
-  db.prepare('DELETE FROM crawl_targets WHERE page_id=?').run(pageId);
   db.prepare('DELETE FROM site_pages WHERE id=?').run(pageId);
 }
 function markNeedsReview(page, result) {
-  db.prepare(`UPDATE site_pages SET crawl_status='needs_review', http_status=?, description=?, content_hash=? WHERE id=?`)
-    .run(result.status || null, result.error || 'بيانات ناقصة أو فشل الجلب', '', page.id);
+  db.prepare(`UPDATE site_pages SET crawl_status='needs_review' WHERE id=?`).run(page.id);
 }
 function markCorrupt(page, result) {
-  db.prepare(`UPDATE site_pages SET crawl_status='corrupt', http_status=?, description=? WHERE id=?`)
-    .run(result.status || null, result.error || 'فشل بعد المحاولة الأخيرة', page.id);
+  db.prepare(`UPDATE site_pages SET crawl_status='corrupt' WHERE id=?`).run(page.id);
   removeFromQueue(page.id);
 }
 
 export async function run(type = 'manual') {
-  const runId = createRun(type);
-  const browserState = { active: 0, limit: 7, waiters: [] };
-  const { targets, phase } = acquireBatch(runId);
+  const browserState = { active: 0, limit: concurrency, waiters: [] };
+  const { targets, phase } = acquireBatch();
   let success = 0; let review = 0; let corrupt = 0;
   const fetched = await mapLimit(targets, (page) => fetchOne(page.url, browserState), concurrency);
   for (let i = 0; i < targets.length; i += 1) {
@@ -200,6 +189,5 @@ export async function run(type = 'manual') {
       review += 1;
     }
   }
-  db.prepare(`UPDATE crawl_runs SET status='completed',finished_at=CURRENT_TIMESTAMP,processed_count=?,success_count=?,failed_count=? WHERE id=?`).run(targets.length, success, review + corrupt, runId);
-  return { runId, phase, total: targets.length, success, needs_review: review, corrupt, batch_size: batchSize, concurrency, retries, fetch_mode: fetchMode };
+  return { phase, total: targets.length, success, needs_review: review, corrupt, batch_size: batchSize, concurrency, retries, fetch_mode: fetchMode };
 }
