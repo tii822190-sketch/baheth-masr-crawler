@@ -127,12 +127,17 @@ async function browseSite(site) {
     }
   }
 
-  const status = accepted > existing ? 'completed' : 'not_pages';
-  const cursor = JSON.stringify({ mode: 'homepage_links_plus_arabic_one_level', sourceUrl: homepage, visited: pagesVisited, arabicLinksExpanded: Math.max(0, visitedUrls.size - (html ? 1 : 0)), linksAdded: Math.max(0, pagesAdded - 1) });
+  // A successful browse is terminal for this pass, even when every link was
+  // already queued. This prevents a not_pages site from looping forever.
+  const status = 'completed';
+  const queuedPages = db.prepare("SELECT COUNT(*) AS count FROM site_pages WHERE site_id=? AND crawl_status IN ('pending','queued')").get(site.id).count;
+  const cursor = JSON.stringify({ mode: 'homepage_links_plus_arabic_one_level', sourceUrl: homepage, visited: pagesVisited, arabicLinksExpanded: Math.max(0, visitedUrls.size - (html ? 1 : 0)), linksAdded: Math.max(0, pagesAdded - 1), queuedPages });
   db.prepare('UPDATE sites SET crawl_status=?,discovery_cursor=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(status, cursor, site.id);
-  return { site_id: site.id, site: site.url, status, pages_added: pagesAdded, pages_total: accepted, pages_visited: pagesVisited, max_pages: MAX_PAGES, discovery_method: 'homepage_html_links_plus_arabic_one_level' };
+  return { site_id: site.id, site: site.url, status, pages_added: pagesAdded, pages_total: accepted, pages_visited: pagesVisited, queued_pages: queuedPages, max_pages: MAX_PAGES, discovery_method: 'homepage_html_links_plus_arabic_one_level' };
 }
 
+// The backup spider only consumes sites that the primary discovery spider
+// left as not_pages. completed and terminal error sites are never selected.
 const site = db.prepare("SELECT id,url,crawl_status FROM sites WHERE crawl_status='not_pages' ORDER BY id LIMIT 1").get();
 if (!site) {
   console.log(JSON.stringify({ ok: true, message: 'no_not_pages_site', processed_sites: 0 }, null, 2));
