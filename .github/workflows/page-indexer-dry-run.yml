@@ -1,0 +1,77 @@
+name: Page Indexer Dry Run
+
+on:
+  workflow_dispatch:
+    inputs:
+      batch_size:
+        description: Pages per temporary batch
+        required: false
+        default: '20'
+      max_pages:
+        description: Maximum pages to crawl temporarily
+        required: false
+        default: '20'
+
+permissions:
+  contents: read
+
+jobs:
+  dry-run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      TURSO_CRAWLER_DATABASE_URL: libsql://alzahf-karamkkr.aws-eu-west-1.turso.io
+      TURSO_CRAWLER_AUTH_TOKEN: ${{ secrets.TURSO_CRAWLER_AUTH_TOKEN }}
+      CRAWLER_INPUT_DB_PATH: /tmp/crawler-links.sqlite
+      CRAWLER_RESULTS_DB_PATH: /tmp/crawler-results.sqlite
+      CRAWLER_SOURCE: unindexed_pages
+      CRAWLER_SEED_STAGING: '0'
+      CRAWLER_DISCOVERY_MODE: '0'
+      CRAWLER_MANUAL_ONLY: '1'
+      CRAWLER_FETCH_MODE: hybrid
+      CRAWLER_LIGHT_MODE: '1'
+      CRAWLER_CONCURRENCY: '10'
+      CRAWLER_BROWSER_CONCURRENCY: '7'
+      CRAWLER_BROWSER_BUDGET_MS: '15000'
+      CRAWLER_PAGE_TIMEOUT_MS: '120000'
+      CRAWLER_RETRIES: '1'
+      CRAWLER_DRAIN_DISCOVERIES: '0'
+      CRAWLER_ONE_BATCH: '1'
+      CRAWLER_RETRY_FAILED: '0'
+      CRAWLER_BATCH_SIZE: ${{ inputs.batch_size || '20' }}
+      CRAWLER_MAX_PAGES: ${{ inputs.max_pages || '20' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Initialize temporary databases
+        run: node crawler/src/cli.mjs init
+      - name: Restore staging snapshot into temporary databases
+        run: node tools/restore-turso-staging.mjs
+      - name: Crawl pages without synchronization
+        run: |
+          set -o pipefail
+          {
+            echo "START $(date -Is)"
+            echo "DRY_RUN=true; production synchronization is disabled"
+            node crawler/src/cli.mjs manual
+            echo "END $(date -Is)"
+          } 2>&1 | tee /tmp/temporary-crawler.log
+      - name: Validate temporary results only
+        if: always()
+        run: node tools/validate-staging.mjs 2>&1 | tee /tmp/temporary-validation.log
+      - name: Upload temporary results and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: page-indexer-dry-run-${{ github.run_id }}
+          path: |
+            /tmp/crawler-links.sqlite
+            /tmp/crawler-results.sqlite
+            /tmp/temporary-crawler.log
+            /tmp/temporary-validation.log
+          if-no-files-found: warn
+          retention-days: 7
