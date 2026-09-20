@@ -95,6 +95,12 @@ function saveCursor(siteId, cursor) { db.prepare('UPDATE sites SET discovery_cur
 async function discoverSite(site) {
   const existing = db.prepare('SELECT COUNT(*) AS count FROM site_pages WHERE site_id=?').get(site.id).count;
   let totalAccepted = existing; let pagesAdded = 0; let sitemapCount = 0;
+  const insert = db.prepare("INSERT OR IGNORE INTO site_pages (site_id,url,crawl_status,crawl_attempts) VALUES (?,? ,'pending',0)");
+  const homepage = isPageUrl(site.url, site.url);
+  if (homepage && totalAccepted < MAX_PAGES_PER_SITE) {
+    const result = insert.run(site.id, homepage);
+    if (result.changes) { pagesAdded += 1; totalAccepted += 1; }
+  }
   const cursor = parseCursor(site.discovery_cursor, site.url);
   const seen = new Set(cursor.seenSitemaps);
   const pending = [...cursor.pendingSitemaps];
@@ -114,7 +120,6 @@ async function discoverSite(site) {
     const allowed = Math.max(0, MAX_PAGES_PER_SITE - totalAccepted);
     if (allowed === 0) { saveCursor(site.id, { pendingSitemaps: pending, seenSitemaps: [...seen], currentSitemap: current, currentPageIndex: pageIndex }); break; }
     const candidates = pageSlice.slice(0, allowed);
-    const insert = db.prepare("INSERT OR IGNORE INTO site_pages (site_id,url,crawl_status,crawl_attempts) VALUES (?,? ,'pending',0)");
     for (let i = 0; i < candidates.length; i += 1) {
       const page = candidates[i];
       const result = insert.run(site.id, page); if (result.changes) { pagesAdded += 1; totalAccepted += 1; }
