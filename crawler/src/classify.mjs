@@ -59,12 +59,13 @@ export function classifyContent({ title = '', description = '', summary = '', ex
   }
 
   const quranSourceText = `${sourceHint} ${normalizedTitle} ${normalizedText}`;
+  const isOfficialQuranDomain = /misrquran/.test(sourceHint);
   const isQuranSite = /quran com|quran ksu|mp3quran|misrquran|tanzil net|surahquran|quran navigator|holy quran|noble quran/.test(quranSourceText);
   const isQuranRadio = /holyquranradio|quranradio|اذاعة القرآن|راديو القرآن/.test(quranSourceText);
   if (isQuranSite || isQuranRadio) {
     const quran = candidates.find((candidate) => candidate.category === 'quran');
     const keyword = isQuranRadio ? 'quran_radio_source' : 'quran_site_source';
-    const points = isQuranRadio ? 20 : 12;
+    const points = isOfficialQuranDomain ? 100 : (isQuranRadio ? 20 : 12);
     if (quran) {
       quran.score += points;
       quran.reasons.push({ keyword, titleHits: 0, descriptionHits: 0, textHits: 1, points });
