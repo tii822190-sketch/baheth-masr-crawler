@@ -9,8 +9,8 @@ const ftsTable = 'search_pages_fts';
 const legacyTable = 'index_results';
 const batchSize = Math.max(1, Number(process.env.TURSO_BATCH_SIZE || 500));
 const maxRows = Math.max(0, Number(process.env.TURSO_MAX_ROWS || 0));
-const requiredPageColumns = ['id', 'url', 'title', 'description', 'icon_url', 'keywords', 'snippet', 'created_at', 'updated_at'];
-const requiredFtsColumns = ['page_id', 'url', 'title', 'description', 'keywords', 'snippet'];
+const requiredPageColumns = ['url', 'title', 'description', 'icon_url', 'snippet', 'keywords'];
+const requiredFtsColumns = ['url', 'title', 'description', 'icon_url', 'snippet', 'keywords'];
 
 if (!tursoUrl || !tursoAuthToken) throw new Error('TURSO_DATABASE_URL and TURSO_AUTH_TOKEN are required');
 const local = new Database(localPath);
@@ -29,38 +29,34 @@ async function rebuildFts() {
   await remote.batch([
     { sql: `DROP TABLE IF EXISTS ${quote(ftsTable)}`, args: [] },
     { sql: `CREATE VIRTUAL TABLE ${quote(ftsTable)} USING fts5(
-      page_id UNINDEXED,
       url UNINDEXED,
       title,
       description,
-      keywords,
+      icon_url UNINDEXED,
       snippet,
+      keywords,
       tokenize='unicode61 remove_diacritics 2'
     )`, args: [] },
-    { sql: `INSERT INTO ${quote(ftsTable)} (page_id,url,title,description,keywords,snippet)
-      SELECT id,url,title,description,keywords,snippet FROM ${quote(pagesTable)}`, args: [] },
+    { sql: `INSERT INTO ${quote(ftsTable)} (url,title,description,icon_url,snippet,keywords)
+      SELECT url,title,description,icon_url,snippet,keywords FROM ${quote(pagesTable)}`, args: [] },
   ], 'write');
 }
 async function ensureExternalSchema() {
   if (!(await exists(pagesTable))) throw new Error(`Required Turso table is missing: ${pagesTable}`);
   const pageColumns = await columns(pagesTable);
-  const legacyTextColumn = pageColumns.includes('snippet') ? 'snippet' : 'content';
+  const textColumn = pageColumns.includes('snippet') ? 'snippet' : 'content';
   if (pageColumns.join(',') !== requiredPageColumns.join(',')) {
     await remote.batch([
       { sql: `CREATE TABLE search_pages_migration (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        url TEXT NOT NULL UNIQUE,
+        url TEXT NOT NULL PRIMARY KEY,
         title TEXT NOT NULL DEFAULT '',
         description TEXT NOT NULL DEFAULT '',
         icon_url TEXT NOT NULL DEFAULT '',
-        keywords TEXT NOT NULL DEFAULT '',
         snippet TEXT NOT NULL DEFAULT '',
-        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        keywords TEXT NOT NULL DEFAULT ''
       )`, args: [] },
-      { sql: `INSERT INTO search_pages_migration (id,url,title,description,icon_url,keywords,snippet,created_at,updated_at)
-        SELECT id,url,title,description,icon_url,keywords,COALESCE(${quote(legacyTextColumn)},''),CURRENT_TIMESTAMP,CURRENT_TIMESTAMP
-        FROM ${quote(pagesTable)}`, args: [] },
+      { sql: `INSERT OR REPLACE INTO search_pages_migration (url,title,description,icon_url,snippet,keywords)
+        SELECT url,title,description,icon_url,COALESCE(${quote(textColumn)},''),keywords FROM ${quote(pagesTable)}`, args: [] },
       { sql: `DROP TABLE ${quote(pagesTable)}`, args: [] },
       { sql: 'ALTER TABLE search_pages_migration RENAME TO search_pages', args: [] },
     ], 'write');
@@ -69,29 +65,27 @@ async function ensureExternalSchema() {
   if (ftsColumns.join(',') !== requiredFtsColumns.join(',')) await rebuildFts();
 }
 async function upsertPage(row) {
-  const content = row.snippet || row.description || '';
   await remote.execute({
-    sql: `INSERT INTO ${quote(pagesTable)}
-      (url,title,description,icon_url,keywords,snippet,created_at,updated_at)
-      VALUES (?,?,?,?,?,?,COALESCE(?,CURRENT_TIMESTAMP),COALESCE(?,CURRENT_TIMESTAMP))
+    sql: `INSERT INTO ${quote(pagesTable)} (url,title,description,icon_url,snippet,keywords)
+      VALUES (?,?,?,?,?,?)
       ON CONFLICT(url) DO UPDATE SET
         title=excluded.title, description=excluded.description, icon_url=excluded.icon_url,
-        keywords=excluded.keywords, snippet=excluded.snippet, updated_at=excluded.updated_at`,
-    args: [row.url, row.title || '', row.description || '', row.icon_url || '', row.keywords || '', content, row.created_at, row.updated_at],
+        snippet=excluded.snippet, keywords=excluded.keywords`,
+    args: [row.url, row.title || '', row.description || '', row.icon_url || '', row.snippet || row.content || '', row.keywords || ''],
   });
-  const page = await remote.execute({ sql: `SELECT id,url,title,description,keywords,snippet FROM ${quote(pagesTable)} WHERE url=?`, args: [row.url] });
-  const item = page.rows[0];
-  if (!item) throw new Error(`Could not resolve search_pages row for ${row.url}`);
-  await remote.execute({ sql: `DELETE FROM ${quote(ftsTable)} WHERE page_id=?`, args: [item.id] });
-  await remote.execute({ sql: `INSERT INTO ${quote(ftsTable)} (page_id,url,title,description,keywords,snippet) VALUES (?,?,?,?,?,?)`, args: [item.id, item.url, item.title, item.description, item.keywords, item.snippet] });
+  const item = await remote.execute({ sql: `SELECT url,title,description,icon_url,snippet,keywords FROM ${quote(pagesTable)} WHERE url=?`, args: [row.url] });
+  const value = item.rows[0];
+  if (!value) throw new Error(`Could not resolve search_pages row for ${row.url}`);
+  await remote.execute({ sql: `DELETE FROM ${quote(ftsTable)} WHERE url=?`, args: [value.url] });
+  await remote.execute({ sql: `INSERT INTO ${quote(ftsTable)} (url,title,description,icon_url,snippet,keywords) VALUES (?,?,?,?,?,?)`, args: [value.url, value.title, value.description, value.icon_url, value.snippet, value.keywords] });
 }
 
 try {
   await ensureExternalSchema();
   const legacyRows = (await exists(legacyTable))
-    ? (await remote.execute(`SELECT url,title,description,icon_url,keywords,snippet,created_at,updated_at FROM ${quote(legacyTable)}`)).rows
+    ? (await remote.execute(`SELECT url,title,description,icon_url,keywords,snippet FROM ${quote(legacyTable)}`)).rows
     : [];
-  const selectSql = `SELECT id,url,title,description,icon_url,keywords,snippet,created_at,updated_at FROM index_results ORDER BY id ${maxRows > 0 ? 'LIMIT ?' : ''}`;
+  const selectSql = `SELECT id,url,title,description,icon_url,keywords,snippet FROM index_results ORDER BY id ${maxRows > 0 ? 'LIMIT ?' : ''}`;
   const localRows = maxRows > 0 ? local.prepare(selectSql).all(maxRows) : local.prepare(selectSql).all();
   const allRows = [...legacyRows, ...localRows];
   for (let offset = 0; offset < allRows.length; offset += batchSize) {
