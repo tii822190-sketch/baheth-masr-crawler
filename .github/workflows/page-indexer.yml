@@ -6,12 +6,12 @@ on:
       batch_size:
         description: Pages per batch
         required: false
-        default: '500'
+        default: '1000'
         type: string
       max_pages:
         description: Maximum pages per run
         required: false
-        default: '500'
+        default: '1000'
         type: string
   schedule:
     # Run hourly except at 00:00, 08:00, and 16:00 UTC when Discovery Spider runs.
@@ -31,8 +31,8 @@ jobs:
     env:
       CRAWLER_INPUT_DB_PATH: db/crawler.sqlite
       CRAWLER_FETCH_MODE: hybrid
-      CRAWLER_BATCH_SIZE: ${{ inputs.batch_size || '500' }}
-      CRAWLER_MAX_PAGES: ${{ inputs.max_pages || '500' }}
+      CRAWLER_BATCH_SIZE: ${{ inputs.batch_size || '1000' }}
+      CRAWLER_MAX_PAGES: ${{ inputs.max_pages || '1000' }}
       CRAWLER_CONCURRENCY: '10'
       CRAWLER_BROWSER_CONCURRENCY: '10'
       CRAWLER_BROWSER_BUDGET_MS: '15000'
@@ -51,7 +51,7 @@ jobs:
       - run: npm ci
       - name: Initialize the local three-table database
         run: node crawler/src/cli.mjs init
-      - name: Run up to 500 queued pages
+      - name: Run up to 1000 queued pages
         run: |
           set -e
           processed_pages=0
