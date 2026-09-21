@@ -14,8 +14,8 @@ on:
         default: '1000'
         type: string
   schedule:
-    # Run hourly except at 01:00 for Turso sync and at 00:00, 08:00, and 16:00 UTC for discovery.
-    - cron: '0 2-7,9-15,17-23 * * *'
+    # Run hourly except at 00:00, 08:00, and 16:00 UTC when Discovery Spider runs.
+    - cron: '0 1-7,9-15,17-23 * * *'
 
 concurrency:
   group: baheth-local-crawler-db
