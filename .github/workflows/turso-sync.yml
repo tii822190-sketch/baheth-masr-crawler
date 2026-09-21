@@ -47,8 +47,13 @@ jobs:
           node --input-type=module <<'NODE'
           import { createClient } from '@libsql/client';
           const client = createClient({ url: process.env.TURSO_DATABASE_URL, authToken: process.env.TURSO_AUTH_TOKEN });
-          const tables = await client.execute("SELECT name FROM sqlite_master WHERE name IN ('search_pages','search_pages_fts') ORDER BY name");
-          if (tables.rows.length !== 2) throw new Error('Required Turso search tables are missing');
+          const tables = await client.execute("SELECT name FROM sqlite_master WHERE type IN ('table','virtual table') AND name IN ('index_results','search_pages','search_pages_fts') ORDER BY name");
+          const names = tables.rows.map((row) => row.name);
+          if (names.join(',') !== 'search_pages,search_pages_fts') throw new Error(`Unexpected Turso target tables: ${names.join(',')}`);
+          const pageColumns = (await client.execute('PRAGMA table_info(search_pages)')).rows.map((row) => row.name);
+          const ftsColumns = (await client.execute('PRAGMA table_info(search_pages_fts)')).rows.map((row) => row.name);
+          if (pageColumns.join(',') !== 'id,url,title,description,icon_url,keywords,snippet,created_at,updated_at') throw new Error(`Unexpected search_pages columns: ${pageColumns.join(',')}`);
+          if (ftsColumns.join(',') !== 'page_id,url,title,description,keywords,snippet') throw new Error(`Unexpected search_pages_fts columns: ${ftsColumns.join(',')}`);
           const pages = (await client.execute('SELECT COUNT(*) AS count FROM search_pages')).rows[0].count;
           const fts = (await client.execute('SELECT COUNT(*) AS count FROM search_pages_fts')).rows[0].count;
           if (Number(pages) !== Number(fts)) throw new Error(`FTS mismatch: search_pages=${pages}, search_pages_fts=${fts}`);
