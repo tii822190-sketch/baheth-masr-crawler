@@ -57,7 +57,12 @@ jobs:
           const pages = (await client.execute('SELECT COUNT(*) AS count FROM search_pages')).rows[0].count;
           const fts = (await client.execute('SELECT COUNT(*) AS count FROM search_pages_fts')).rows[0].count;
           if (Number(pages) !== Number(fts)) throw new Error(`FTS mismatch: search_pages=${pages}, search_pages_fts=${fts}`);
-          console.log(JSON.stringify({ search_pages: pages, search_pages_fts: fts }, null, 2));
+          const duplicatePages = (await client.execute('SELECT COUNT(*) - COUNT(DISTINCT url) AS count FROM search_pages')).rows[0].count;
+          const duplicateFts = (await client.execute('SELECT COUNT(*) - COUNT(DISTINCT url) AS count FROM search_pages_fts')).rows[0].count;
+          const missingFts = (await client.execute('SELECT COUNT(*) AS count FROM search_pages p LEFT JOIN search_pages_fts f ON f.url=p.url WHERE f.url IS NULL')).rows[0].count;
+          const orphanFts = (await client.execute('SELECT COUNT(*) AS count FROM search_pages_fts f LEFT JOIN search_pages p ON p.url=f.url WHERE p.url IS NULL')).rows[0].count;
+          if (Number(duplicatePages) !== 0 || Number(duplicateFts) !== 0 || Number(missingFts) !== 0 || Number(orphanFts) !== 0) throw new Error(`Duplicate/link mismatch: duplicatePages=${duplicatePages}, duplicateFts=${duplicateFts}, missingFts=${missingFts}, orphanFts=${orphanFts}`);
+          console.log(JSON.stringify({ search_pages: pages, search_pages_fts: fts, duplicate_pages: duplicatePages, duplicate_fts: duplicateFts, missing_fts: missingFts, orphan_fts: orphanFts }, null, 2));
           client.close();
           NODE
       - name: Verify local database
