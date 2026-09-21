@@ -14,7 +14,8 @@ on:
         default: '500'
         type: string
   schedule:
-    - cron: '0 * * * *'
+    # Run hourly except at 00:00, 08:00, and 16:00 UTC when Discovery Spider runs.
+    - cron: '0 1-7,9-15,17-23 * * *'
 
 concurrency:
   group: baheth-local-crawler-db

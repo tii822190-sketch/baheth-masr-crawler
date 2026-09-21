@@ -3,6 +3,7 @@ name: Discovery Spider
 on:
   workflow_dispatch:
   schedule:
+    # Three runs per day: 00:00, 08:00, and 16:00 UTC (24:00 is 00:00).
     - cron: '0 0,8,16 * * *'
 
 permissions:
