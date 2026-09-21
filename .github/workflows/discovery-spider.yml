@@ -22,6 +22,8 @@ jobs:
       DISCOVERY_MAX_SITEMAPS: '2000'
       DISCOVERY_TIMEOUT_MS: '20000'
       DISCOVERY_RESUME_INCOMPLETE: 'false'
+      DISCOVERY_BROWSER_BUDGET_MS: '30000'
+      DISCOVERY_BROWSER_SCROLL_STEPS: '6'
     steps:
       - uses: actions/checkout@v4
         with:

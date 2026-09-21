@@ -1,11 +1,15 @@
 import zlib from 'node:zlib';
+import { spawn } from 'node:child_process';
 import Database from 'better-sqlite3';
+import * as cheerio from 'cheerio';
 
 const DB_PATH = process.env.CRAWLER_DB_PATH || 'db/crawler.sqlite';
 const MAX_PAGES_PER_SITE = Math.max(1, Number(process.env.DISCOVERY_MAX_PAGES_PER_SITE || 10000));
 const REQUEST_TIMEOUT_MS = Math.max(1000, Number(process.env.DISCOVERY_TIMEOUT_MS || 20000));
 const MAX_SITEMAPS = Math.max(1, Number(process.env.DISCOVERY_MAX_SITEMAPS || 2000));
 const RESUME_INCOMPLETE = /^(1|true|yes)$/i.test(process.env.DISCOVERY_RESUME_INCOMPLETE || '');
+const BROWSER_BUDGET_MS = Math.max(1000, Number(process.env.DISCOVERY_BROWSER_BUDGET_MS || 30000));
+const BROWSER_SCROLL_STEPS = Math.max(1, Number(process.env.DISCOVERY_BROWSER_SCROLL_STEPS || 6));
 const db = new Database(DB_PATH);
 db.pragma('foreign_keys = ON');
 
@@ -69,6 +73,65 @@ async function mapLimit(items, worker, limit) {
   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, consume));
   return out;
 }
+function sleep(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
+async function renderInteractive(url) {
+  return new Promise((resolve) => {
+    const child = spawn('/usr/bin/chromium', ['--headless=new','--no-sandbox','--disable-gpu','--disable-dev-shm-usage','--remote-debugging-port=0','--remote-allow-origins=*','--no-first-run','--no-default-browser-check'], { stdio: ['ignore', 'ignore', 'pipe'] });
+    let stderr = ''; let settled = false; let connecting = false;
+    const finish = (html = '') => { if (settled) return; settled = true; clearTimeout(timer); try { child.kill('SIGKILL'); } catch {} resolve(html); };
+    const timer = setTimeout(() => finish(''), REQUEST_TIMEOUT_MS + BROWSER_BUDGET_MS + 10000);
+    child.stderr.on('data', async (chunk) => {
+      stderr += chunk.toString();
+      const match = stderr.match(/DevTools listening on (ws:\/\/127\.0\.0\.1:(\d+)\/[^\s]+)/);
+      if (!match || settled || connecting) return;
+      connecting = true;
+      try {
+        const targets = await fetch(`http://127.0.0.1:${match[2]}/json/list`).then((response) => response.json());
+        const target = targets.find((item) => item.type === 'page' && item.webSocketDebuggerUrl);
+        if (!target) return finish('');
+        const socket = new WebSocket(target.webSocketDebuggerUrl); let nextId = 0; const pending = new Map();
+        socket.onmessage = (event) => { const message = JSON.parse(event.data); const callback = pending.get(message.id); if (callback) { pending.delete(message.id); callback(message); } };
+        const command = (method, params = {}) => new Promise((resolveCommand, reject) => { const id = ++nextId; pending.set(id, (message) => message.error ? reject(new Error(message.error.message)) : resolveCommand(message)); socket.send(JSON.stringify({ id, method, params })); });
+        socket.onopen = async () => {
+          try {
+            await command('Page.enable'); await command('Runtime.enable'); await command('Page.navigate', { url }); await sleep(BROWSER_BUDGET_MS);
+            const expression = `(async()=>{for(let i=0;i<${BROWSER_SCROLL_STEPS};i++){window.scrollTo(0,document.body.scrollHeight);await new Promise(r=>setTimeout(r,1000));}window.scrollTo(0,0);return document.documentElement.outerHTML;})()`;
+            const result = await command('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true }); socket.close(); finish(result.result?.result?.value || '');
+          } catch { try { socket.close(); } catch {} finish(''); }
+        };
+        socket.onerror = () => finish('');
+      } catch { finish(''); }
+    });
+    child.on('error', () => finish(''));
+  });
+}
+async function renderDumpDom(url) {
+  return new Promise((resolve) => {
+    const child = spawn('/usr/bin/chromium', ['--headless=new','--no-sandbox','--disable-gpu','--disable-dev-shm-usage',`--virtual-time-budget=${BROWSER_BUDGET_MS}`,'--run-all-compositor-stages-before-draw','--dump-dom',url], { stdio: ['ignore', 'pipe', 'ignore'] });
+    let html = ''; const timer = setTimeout(() => { try { child.kill('SIGKILL'); } catch {} resolve(''); }, REQUEST_TIMEOUT_MS + BROWSER_BUDGET_MS + 10000);
+    child.stdout.on('data', (chunk) => { html += chunk; });
+    child.on('close', () => { clearTimeout(timer); resolve(html); });
+  });
+}
+async function renderPage(url) {
+  let rawHtml = '';
+  try {
+    const response = await fetch(url, { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS), headers: { 'user-agent': 'BahethMasrDiscovery/5.0' } });
+    if (response.ok) rawHtml = await response.text();
+    if ((rawHtml.match(/<a\b[^>]*href=/gi) || []).length > 0) return rawHtml;
+  } catch {}
+  return (await renderInteractive(url)) || (await renderDumpDom(url)) || rawHtml;
+}
+function extractHtmlLinks(html, siteUrl) {
+  const $ = cheerio.load(html); const links = new Map();
+  $('a[href]').each((_, element) => {
+    const url = isPageUrl($(element).attr('href'), siteUrl); if (!url || links.has(url)) return;
+    const text = $(element).text().replace(/\s+/g, ' ').trim(); let pagePath = '';
+    try { pagePath = decodeURIComponent(new URL(url).pathname); } catch {}
+    links.set(url, { url, hasArabic: /[\u0600-\u06FF]/.test(`${text} ${pagePath}`) });
+  });
+  return [...links.values()];
+}
 function xmlLinks(xml, baseUrl, siteUrl) {
   const text = String(xml || '').replace(/^\uFEFF/, '').trim();
   if (!text || /<\s*(?:!doctype\s+html|html\b)/i.test(text)) return { valid: false, pages: [], sitemaps: [] };
@@ -131,11 +194,39 @@ async function discoverSite(site) {
     current = null; pageIndex = 0;
     saveCursor(site.id, { pendingSitemaps: pending, seenSitemaps: [...seen], currentSitemap: lastCompletedSitemap, currentPageIndex: lastCompletedPageIndex });
   }
+  let browserFallback = { attempted: false, pagesVisited: 0, linksAdded: 0, arabicLinksExpanded: 0 };
+  if (pagesAdded <= 1 && homepage && totalAccepted < MAX_PAGES_PER_SITE) {
+    browserFallback.attempted = true;
+    const queued = new Set();
+    const addBrowserPage = (url) => {
+      if (!url || totalAccepted >= MAX_PAGES_PER_SITE || queued.has(url)) return false;
+      queued.add(url);
+      const result = insert.run(site.id, url);
+      if (result.changes) { totalAccepted += 1; pagesAdded += 1; browserFallback.linksAdded += 1; }
+      return true;
+    };
+    const homepageHtml = await renderPage(homepage);
+    if (homepageHtml) {
+      browserFallback.pagesVisited += 1;
+      addBrowserPage(homepage);
+      const homepageLinks = extractHtmlLinks(homepageHtml, site.url);
+      for (const link of homepageLinks) addBrowserPage(link.url);
+      for (const link of homepageLinks.filter((item) => item.hasArabic)) {
+        if (totalAccepted >= MAX_PAGES_PER_SITE) break;
+        const childHtml = await renderPage(link.url);
+        browserFallback.arabicLinksExpanded += 1;
+        if (!childHtml) continue;
+        browserFallback.pagesVisited += 1;
+        for (const childLink of extractHtmlLinks(childHtml, site.url)) addBrowserPage(childLink.url);
+      }
+    }
+  }
   const incomplete = totalAccepted >= MAX_PAGES_PER_SITE && (current || pending.length || seen.size >= MAX_SITEMAPS);
-  const status = incomplete ? 'incomplete' : 'completed';
-  const finalCursor = { pendingSitemaps: pending, seenSitemaps: [...seen], currentSitemap: current || lastCompletedSitemap, currentPageIndex: current ? pageIndex : lastCompletedPageIndex };
+  const fallbackFailed = browserFallback.attempted && browserFallback.linksAdded === 0;
+  const status = fallbackFailed ? 'not_pages' : incomplete ? 'incomplete' : 'completed';
+  const finalCursor = { pendingSitemaps: pending, seenSitemaps: [...seen], currentSitemap: current || lastCompletedSitemap, currentPageIndex: current ? pageIndex : lastCompletedPageIndex, browserFallback };
   db.prepare('UPDATE sites SET crawl_status=?,discovery_cursor=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(status, JSON.stringify(finalCursor), site.id);
-  return { site_id: site.id, site: site.url, status, sitemaps_scanned: sitemapCount, pages_added: pagesAdded, pages_total: totalAccepted, max_pages: MAX_PAGES_PER_SITE, resume_point_saved: incomplete, validation: 'deferred_to_crawler' };
+  return { site_id: site.id, site: site.url, status, sitemaps_scanned: sitemapCount, pages_added: pagesAdded, pages_total: totalAccepted, max_pages: MAX_PAGES_PER_SITE, resume_point_saved: incomplete, browser_fallback: browserFallback, validation: 'deferred_to_crawler' };
 }
 
 const requestedSite = canonicalize(process.env.DISCOVERY_SITE_URL || '');
