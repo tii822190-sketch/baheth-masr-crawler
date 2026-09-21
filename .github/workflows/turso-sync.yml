@@ -1,0 +1,64 @@
+name: Sync Index Results to Turso
+
+on:
+  workflow_dispatch:
+  schedule:
+    # GitHub Actions cron uses UTC: daily at 01:00 UTC.
+    - cron: '0 1 * * *'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: baheth-local-crawler-db
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      CRAWLER_DB_PATH: db/crawler.sqlite
+      TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+      TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+      TURSO_RESULTS_TABLE: index_results
+      TURSO_BATCH_SIZE: '500'
+      # Temporary production test cap: transfer at most 30 rows per run.
+      TURSO_MAX_ROWS: '30'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Validate Turso secrets
+        run: |
+          test -n "$TURSO_DATABASE_URL"
+          test -n "$TURSO_AUTH_TOKEN"
+      - name: Initialize and transfer index results
+        run: node tools/sync-to-turso.mjs
+      - name: Verify local database
+        run: |
+          node --input-type=module <<'NODE'
+          import Database from 'better-sqlite3';
+          const db = new Database('db/crawler.sqlite', { readonly: true });
+          if (db.prepare('PRAGMA integrity_check').get().integrity_check !== 'ok') throw new Error('Database integrity check failed');
+          const remaining = db.prepare('SELECT COUNT(*) AS count FROM index_results').get().count;
+          console.log(JSON.stringify({ index_results_remaining: remaining, integrity: 'ok' }, null, 2));
+          db.close();
+          NODE
+      - name: Commit cleaned local database
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add db/crawler.sqlite
+          if git diff --cached --quiet; then
+            echo "No database changes to commit."
+          else
+            git commit -m "Sync index results to Turso and clean local database"
+            git push origin HEAD:main
+          fi
