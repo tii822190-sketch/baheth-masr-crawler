@@ -24,8 +24,8 @@ jobs:
       TURSO_PAGES_TABLE: search_pages
       TURSO_FTS_TABLE: search_pages_fts
       TURSO_BATCH_SIZE: '500'
-      # Temporary production test cap: transfer at most 30 rows per run.
-      TURSO_MAX_ROWS: '30'
+      TURSO_MAX_ROWS: '0'
+      TURSO_RETRIES: '5'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -67,6 +67,7 @@ jobs:
           const db = new Database('db/crawler.sqlite', { readonly: true });
           if (db.prepare('PRAGMA integrity_check').get().integrity_check !== 'ok') throw new Error('Database integrity check failed');
           const remaining = db.prepare('SELECT COUNT(*) AS count FROM index_results').get().count;
+          if (remaining !== 0) throw new Error(`Local index_results still contains ${remaining} rows`);
           console.log(JSON.stringify({ index_results_remaining: remaining, integrity: 'ok' }, null, 2));
           db.close();
           NODE
