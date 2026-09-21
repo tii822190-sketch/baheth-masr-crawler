@@ -132,6 +132,9 @@ function extractHtmlLinks(html, siteUrl) {
   });
   return [...links.values()];
 }
+function isLanguageOnlyUrl(url) {
+  try { return /^\/(?:ar|en|fr|de|es|it|ru|zh)(?:\/)?$/i.test(new URL(url).pathname); } catch { return false; }
+}
 function xmlLinks(xml, baseUrl, siteUrl) {
   const text = String(xml || '').replace(/^\uFEFF/, '').trim();
   if (!text || /<\s*(?:!doctype\s+html|html\b)/i.test(text)) return { valid: false, pages: [], sitemaps: [] };
@@ -194,7 +197,7 @@ async function discoverSite(site) {
     current = null; pageIndex = 0;
     saveCursor(site.id, { pendingSitemaps: pending, seenSitemaps: [...seen], currentSitemap: lastCompletedSitemap, currentPageIndex: lastCompletedPageIndex });
   }
-  let browserFallback = { attempted: false, pagesVisited: 0, linksAdded: 0, arabicLinksExpanded: 0 };
+  let browserFallback = { attempted: false, pagesVisited: 0, linksAdded: 0, contentLinksAdded: 0, languageLinksAdded: 0, arabicLinksExpanded: 0 };
   if (pagesAdded <= 1 && homepage && totalAccepted < MAX_PAGES_PER_SITE) {
     browserFallback.attempted = true;
     const queued = new Set();
@@ -202,7 +205,11 @@ async function discoverSite(site) {
       if (!url || totalAccepted >= MAX_PAGES_PER_SITE || queued.has(url)) return false;
       queued.add(url);
       const result = insert.run(site.id, url);
-      if (result.changes) { totalAccepted += 1; pagesAdded += 1; browserFallback.linksAdded += 1; }
+      if (result.changes) {
+        totalAccepted += 1; pagesAdded += 1; browserFallback.linksAdded += 1;
+        if (isLanguageOnlyUrl(url)) browserFallback.languageLinksAdded += 1;
+        else browserFallback.contentLinksAdded += 1;
+      }
       return true;
     };
     const homepageHtml = await renderPage(homepage);
@@ -222,7 +229,7 @@ async function discoverSite(site) {
     }
   }
   const incomplete = totalAccepted >= MAX_PAGES_PER_SITE && (current || pending.length || seen.size >= MAX_SITEMAPS);
-  const fallbackFailed = browserFallback.attempted && browserFallback.linksAdded === 0;
+  const fallbackFailed = browserFallback.attempted && browserFallback.contentLinksAdded === 0;
   const status = fallbackFailed ? 'not_pages' : incomplete ? 'incomplete' : 'completed';
   const finalCursor = { pendingSitemaps: pending, seenSitemaps: [...seen], currentSitemap: current || lastCompletedSitemap, currentPageIndex: current ? pageIndex : lastCompletedPageIndex, browserFallback };
   db.prepare('UPDATE sites SET crawl_status=?,discovery_cursor=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(status, JSON.stringify(finalCursor), site.id);
