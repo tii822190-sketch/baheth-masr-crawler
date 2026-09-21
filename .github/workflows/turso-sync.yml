@@ -21,7 +21,8 @@ jobs:
       CRAWLER_DB_PATH: db/crawler.sqlite
       TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
       TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
-      TURSO_RESULTS_TABLE: index_results
+      TURSO_PAGES_TABLE: search_pages
+      TURSO_FTS_TABLE: search_pages_fts
       TURSO_BATCH_SIZE: '500'
       # Temporary production test cap: transfer at most 30 rows per run.
       TURSO_MAX_ROWS: '30'
@@ -39,8 +40,21 @@ jobs:
         run: |
           test -n "$TURSO_DATABASE_URL"
           test -n "$TURSO_AUTH_TOKEN"
-      - name: Initialize and transfer index results
+      - name: Transfer index results into search pages and FTS
         run: node tools/sync-to-turso.mjs
+      - name: Verify Turso search tables
+        run: |
+          node --input-type=module <<'NODE'
+          import { createClient } from '@libsql/client';
+          const client = createClient({ url: process.env.TURSO_DATABASE_URL, authToken: process.env.TURSO_AUTH_TOKEN });
+          const tables = await client.execute("SELECT name FROM sqlite_master WHERE name IN ('search_pages','search_pages_fts') ORDER BY name");
+          if (tables.rows.length !== 2) throw new Error('Required Turso search tables are missing');
+          const pages = (await client.execute('SELECT COUNT(*) AS count FROM search_pages')).rows[0].count;
+          const fts = (await client.execute('SELECT COUNT(*) AS count FROM search_pages_fts')).rows[0].count;
+          if (Number(pages) !== Number(fts)) throw new Error(`FTS mismatch: search_pages=${pages}, search_pages_fts=${fts}`);
+          console.log(JSON.stringify({ search_pages: pages, search_pages_fts: fts }, null, 2));
+          client.close();
+          NODE
       - name: Verify local database
         run: |
           node --input-type=module <<'NODE'
