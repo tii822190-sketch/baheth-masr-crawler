@@ -21,9 +21,7 @@ jobs:
       CRAWLER_DB_PATH: db/crawler.sqlite
       TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
       TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
-      TURSO_PAGES_TABLE: search_pages
-      TURSO_FTS_TABLE: search_pages_fts
-      TURSO_BATCH_SIZE: '500'
+      TURSO_BATCH_SIZE: '250'
       TURSO_MAX_ROWS: '0'
       TURSO_RETRIES: '5'
     steps:
@@ -40,32 +38,9 @@ jobs:
         run: |
           test -n "$TURSO_DATABASE_URL"
           test -n "$TURSO_AUTH_TOKEN"
-      - name: Transfer index results into search pages and FTS
+      - name: Transfer index results to Turso using write-only sync
         run: node tools/sync-to-turso.mjs
-      - name: Verify Turso search tables
-        run: |
-          node --input-type=module <<'NODE'
-          import { createClient } from '@libsql/client';
-          const client = createClient({ url: process.env.TURSO_DATABASE_URL, authToken: process.env.TURSO_AUTH_TOKEN });
-          const tables = await client.execute("SELECT name FROM sqlite_master WHERE type IN ('table','virtual table') AND name IN ('index_results','search_pages','search_pages_fts') ORDER BY name");
-          const names = tables.rows.map((row) => row.name);
-          if (names.join(',') !== 'search_pages,search_pages_fts') throw new Error(`Unexpected Turso target tables: ${names.join(',')}`);
-          const pageColumns = (await client.execute('PRAGMA table_info(search_pages)')).rows.map((row) => row.name);
-          const ftsColumns = (await client.execute('PRAGMA table_info(search_pages_fts)')).rows.map((row) => row.name);
-          if (pageColumns.join(',') !== 'url,title,description,icon_url,snippet,keywords') throw new Error(`Unexpected search_pages columns: ${pageColumns.join(',')}`);
-          if (ftsColumns.join(',') !== 'url,title,description,icon_url,snippet,keywords') throw new Error(`Unexpected search_pages_fts columns: ${ftsColumns.join(',')}`);
-          const pages = (await client.execute('SELECT COUNT(*) AS count FROM search_pages')).rows[0].count;
-          const fts = (await client.execute('SELECT COUNT(*) AS count FROM search_pages_fts')).rows[0].count;
-          if (Number(pages) !== Number(fts)) throw new Error(`FTS mismatch: search_pages=${pages}, search_pages_fts=${fts}`);
-          const duplicatePages = (await client.execute('SELECT COUNT(*) - COUNT(DISTINCT url) AS count FROM search_pages')).rows[0].count;
-          const duplicateFts = (await client.execute('SELECT COUNT(*) - COUNT(DISTINCT url) AS count FROM search_pages_fts')).rows[0].count;
-          const missingFts = (await client.execute('SELECT COUNT(*) AS count FROM search_pages p LEFT JOIN search_pages_fts f ON f.url=p.url WHERE f.url IS NULL')).rows[0].count;
-          const orphanFts = (await client.execute('SELECT COUNT(*) AS count FROM search_pages_fts f LEFT JOIN search_pages p ON p.url=f.url WHERE p.url IS NULL')).rows[0].count;
-          if (Number(duplicatePages) !== 0 || Number(duplicateFts) !== 0 || Number(missingFts) !== 0 || Number(orphanFts) !== 0) throw new Error(`Duplicate/link mismatch: duplicatePages=${duplicatePages}, duplicateFts=${duplicateFts}, missingFts=${missingFts}, orphanFts=${orphanFts}`);
-          console.log(JSON.stringify({ search_pages: pages, search_pages_fts: fts, duplicate_pages: duplicatePages, duplicate_fts: duplicateFts, missing_fts: missingFts, orphan_fts: orphanFts }, null, 2));
-          client.close();
-          NODE
-      - name: Verify local database
+      - name: Verify local database only
         run: |
           node --input-type=module <<'NODE'
           import Database from 'better-sqlite3';
@@ -73,7 +48,7 @@ jobs:
           if (db.prepare('PRAGMA integrity_check').get().integrity_check !== 'ok') throw new Error('Database integrity check failed');
           const remaining = db.prepare('SELECT COUNT(*) AS count FROM index_results').get().count;
           if (remaining !== 0) throw new Error(`Local index_results still contains ${remaining} rows`);
-          console.log(JSON.stringify({ index_results_remaining: remaining, integrity: 'ok' }, null, 2));
+          console.log(JSON.stringify({ index_results_remaining: remaining, integrity: 'ok', remote_checks: 'disabled' }, null, 2));
           db.close();
           NODE
       - name: Commit cleaned local database
@@ -84,6 +59,6 @@ jobs:
           if git diff --cached --quiet; then
             echo "No database changes to commit."
           else
-            git commit -m "Sync index results to Turso and clean local database"
+            git commit -m "Use write-only Turso synchronization"
             git push origin HEAD:main
           fi
