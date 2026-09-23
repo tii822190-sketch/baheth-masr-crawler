@@ -6,16 +6,11 @@ CREATE TABLE IF NOT EXISTS search_pages (
   title TEXT NOT NULL DEFAULT '',
   description TEXT NOT NULL DEFAULT '',
   icon_url TEXT NOT NULL DEFAULT '',
-  keywords TEXT NOT NULL DEFAULT '',
-  snippet TEXT NOT NULL DEFAULT ''
+  search_text TEXT NOT NULL DEFAULT ''
 );
 
 CREATE VIRTUAL TABLE IF NOT EXISTS search_pages_fts USING fts5(
   url UNINDEXED,
-  title,
-  description,
-  icon_url UNINDEXED,
-  snippet,
-  keywords,
+  search_text,
   tokenize='unicode61 remove_diacritics 2'
 );

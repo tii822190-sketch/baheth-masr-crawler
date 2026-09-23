@@ -9,8 +9,8 @@ const db = {
         return {
           async run() {
             if (sql.includes('INSERT INTO search_pages (')) {
-              const [url, title, description, icon_url, keywords, snippet, search_text] = args;
-              rows.push({ url, title, description, icon_url, keywords, snippet, search_text });
+              const [url, title, description, icon_url, search_text] = args;
+              rows.push({ url, title, description, icon_url, search_text });
             } else if (sql.includes('DELETE FROM search_pages_fts')) {
               const index = ftsRows.findIndex((row) => row.url === args[0]);
               if (index >= 0) ftsRows.splice(index, 1);
@@ -33,7 +33,7 @@ const request = new Request('https://baheth-masr-ingest.workers.dev/', {
     title: 'وزارة الأوقاف الموقع الرسمي',
     description: 'أهلا بيك في الموقع الرسمي لوزارة الأوقاف',
     keywords: 'وزارة، الأوقاف، الفتوى',
-    snippet: 'هذا المقتطف لا يدخل في نص البحث الموحد',
+    snippet: 'هذا المقتطف يدخل في نص البحث الموحد',
     icon_url: 'https://www.karam.com/favicon.ico',
   }),
 });
@@ -41,7 +41,7 @@ const request = new Request('https://baheth-masr-ingest.workers.dev/', {
 const response = await worker.fetch(request, { DB: db, INGEST_TOKEN: 'local-test-token' });
 const body = await response.json();
 const row = rows[0];
-const expected = 'وزارة الأوقاف الموقع الرسمي أهلا بيك في الموقع الرسمي لوزارة الأوقاف وزارة، الأوقاف، الفتوى karam.com';
+const expected = 'وزارة الأوقاف الموقع الرسمي أهلا بيك في الموقع الرسمي لوزارة الأوقاف وزارة، الأوقاف، الفتوى هذا المقتطف يدخل في نص البحث الموحد karam.com';
 if (response.status !== 200) throw new Error(`Unexpected status: ${response.status}`);
 if (body.inserted !== 1) throw new Error(`Unexpected inserted count: ${body.inserted}`);
 if (row.url !== 'karam.com') throw new Error(`URL was not reduced to domain: ${row.url}`);

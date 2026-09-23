@@ -41,23 +41,21 @@ function rowFromInput(input) {
   const description = clean(input.description);
   const keywords = clean(input.keywords);
   const snippet = clean(input.snippet || input.content);
-  const searchText = clean([title, description, keywords, url].filter(Boolean).join(" "));
+  const searchText = clean([title, description, keywords, snippet, url].filter(Boolean).join(" "));
   if (!url || !searchText) return null;
-  return { url, title, description, icon_url: clean(input.icon_url), keywords, snippet, search_text: searchText };
+  return { url, title, description, icon_url: clean(input.icon_url), search_text: searchText };
 }
 
 async function upsert(env, row) {
   await env.DB.prepare(`
-    INSERT INTO search_pages (url, title, description, icon_url, keywords, snippet, search_text)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO search_pages (url, title, description, icon_url, search_text)
+    VALUES (?, ?, ?, ?, ?)
     ON CONFLICT(url) DO UPDATE SET
       title=excluded.title,
       description=excluded.description,
       icon_url=excluded.icon_url,
-      keywords=excluded.keywords,
-      snippet=excluded.snippet,
       search_text=excluded.search_text
-  `).bind(row.url, row.title, row.description, row.icon_url, row.keywords, row.snippet, row.search_text).run();
+  `).bind(row.url, row.title, row.description, row.icon_url, row.search_text).run();
   await env.DB.prepare("DELETE FROM search_pages_fts WHERE url = ?").bind(row.url).run();
   await env.DB.prepare("INSERT INTO search_pages_fts (url, search_text) VALUES (?, ?)").bind(row.url, row.search_text).run();
 }
