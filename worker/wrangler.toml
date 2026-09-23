@@ -1,0 +1,11 @@
+name = "baheth-masr-ingest"
+main = "src/index.js"
+compatibility_date = "2026-09-23"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "baheth-masr-search"
+database_id = "d8348bc7-5436-4037-b4ad-c1152405c64d"
+
+# Configure this as a Worker secret before accepting requests:
+# wrangler secret put INGEST_TOKEN
