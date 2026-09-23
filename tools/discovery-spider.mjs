@@ -55,7 +55,7 @@ async function fetchResponse(url, method = 'GET') {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
-    return await fetch(url, { method, signal: controller.signal, redirect: 'follow', headers: { 'user-agent': 'BahethMasrDiscovery/5.0 (+sitemap-only)' } });
+    return await fetch(url, { method, signal: controller.signal, redirect: 'follow', headers: { 'user-agent': 'BahethMasrDiscovery/5.1 (+sitemap-feed-browser)' } });
   } catch { return null; } finally { clearTimeout(timer); }
 }
 async function fetchBytes(url) {
@@ -150,6 +150,10 @@ function sitemapCandidates(siteUrl) {
   const origin = new URL(siteUrl).origin;
   return [`${origin}/sitemap.xml`, `${origin}/sitemap_index.xml`, `${origin}/sitemap-index.xml`, `${origin}/sitemap/sitemap.xml`, `${origin}/sitemap/sitemap-index.xml`, `${origin}/post-sitemap.xml`, `${origin}/page-sitemap.xml`, `${origin}/sitemap-pages.xml`];
 }
+function feedCandidates(siteUrl) {
+  const origin = new URL(siteUrl).origin;
+  return [`${origin}/feed`, `${origin}/feed/`, `${origin}/rss`, `${origin}/rss.xml`, `${origin}/atom.xml`, `${origin}/feed.xml`, `${origin}/feeds/posts/default`, `${origin}/feeds/posts/default?alt=rss`];
+}
 function parseCursor(raw, siteUrl) {
   try {
     const x = JSON.parse(raw || '{}');
@@ -197,6 +201,22 @@ async function discoverSite(site) {
     current = null; pageIndex = 0;
     saveCursor(site.id, { pendingSitemaps: pending, seenSitemaps: [...seen], currentSitemap: lastCompletedSitemap, currentPageIndex: lastCompletedPageIndex });
   }
+  let feedFallback = { attempted: false, feedsScanned: 0, pagesAdded: 0 };
+  if (pagesAdded <= 1 && homepage && totalAccepted < MAX_PAGES_PER_SITE) {
+    feedFallback.attempted = true;
+    const feedSeen = new Set();
+    for (const feed of feedCandidates(site.url)) {
+      if (totalAccepted >= MAX_PAGES_PER_SITE || feedSeen.has(feed)) break;
+      feedSeen.add(feed);
+      const parsed = xmlLinks(await fetchBytes(feed), feed, site.url);
+      feedFallback.feedsScanned += 1;
+      for (const page of parsed.pages) {
+        if (totalAccepted >= MAX_PAGES_PER_SITE) break;
+        const result = insert.run(site.id, page);
+        if (result.changes) { pagesAdded += 1; totalAccepted += 1; feedFallback.pagesAdded += 1; }
+      }
+    }
+  }
   let browserFallback = { attempted: false, pagesVisited: 0, linksAdded: 0, contentLinksAdded: 0, languageLinksAdded: 0, arabicLinksExpanded: 0 };
   if (pagesAdded <= 1 && homepage && totalAccepted < MAX_PAGES_PER_SITE) {
     browserFallback.attempted = true;
@@ -231,9 +251,9 @@ async function discoverSite(site) {
   const incomplete = totalAccepted >= MAX_PAGES_PER_SITE && (current || pending.length || seen.size >= MAX_SITEMAPS);
   const fallbackFailed = browserFallback.attempted && browserFallback.contentLinksAdded === 0;
   const status = fallbackFailed ? 'not_pages' : incomplete ? 'incomplete' : 'completed';
-  const finalCursor = { pendingSitemaps: pending, seenSitemaps: [...seen], currentSitemap: current || lastCompletedSitemap, currentPageIndex: current ? pageIndex : lastCompletedPageIndex, browserFallback };
+  const finalCursor = { pendingSitemaps: pending, seenSitemaps: [...seen], currentSitemap: current || lastCompletedSitemap, currentPageIndex: current ? pageIndex : lastCompletedPageIndex, feedFallback, browserFallback };
   db.prepare('UPDATE sites SET crawl_status=?,discovery_cursor=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(status, JSON.stringify(finalCursor), site.id);
-  return { site_id: site.id, site: site.url, status, sitemaps_scanned: sitemapCount, pages_added: pagesAdded, pages_total: totalAccepted, max_pages: MAX_PAGES_PER_SITE, resume_point_saved: incomplete, browser_fallback: browserFallback, validation: 'deferred_to_crawler' };
+  return { site_id: site.id, site: site.url, status, sitemaps_scanned: sitemapCount, feeds_scanned: feedFallback.feedsScanned, pages_added: pagesAdded, pages_total: totalAccepted, max_pages: MAX_PAGES_PER_SITE, resume_point_saved: incomplete, feed_fallback: feedFallback, browser_fallback: browserFallback, validation: 'deferred_to_crawler' };
 }
 
 const requestedSite = canonicalize(process.env.DISCOVERY_SITE_URL || '');
