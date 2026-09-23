@@ -19,7 +19,7 @@ jobs:
     timeout-minutes: 120
     env:
       CRAWLER_DB_PATH: db/crawler.sqlite
-      DISCOVERY_MAX_PAGES_PER_SITE: '10000'
+      DISCOVERY_MAX_PAGES_PER_SITE: '5000'
       DISCOVERY_MAX_SITEMAPS: '2000'
       DISCOVERY_TIMEOUT_MS: '20000'
       DISCOVERY_RESUME_INCOMPLETE: 'false'

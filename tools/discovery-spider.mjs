@@ -4,7 +4,7 @@ import Database from 'better-sqlite3';
 import * as cheerio from 'cheerio';
 
 const DB_PATH = process.env.CRAWLER_DB_PATH || 'db/crawler.sqlite';
-const MAX_PAGES_PER_SITE = Math.max(1, Number(process.env.DISCOVERY_MAX_PAGES_PER_SITE || 10000));
+const MAX_PAGES_PER_SITE = Math.max(1, Number(process.env.DISCOVERY_MAX_PAGES_PER_SITE || 5000));
 const REQUEST_TIMEOUT_MS = Math.max(1000, Number(process.env.DISCOVERY_TIMEOUT_MS || 20000));
 const MAX_SITEMAPS = Math.max(1, Number(process.env.DISCOVERY_MAX_SITEMAPS || 2000));
 const RESUME_INCOMPLETE = /^(1|true|yes)$/i.test(process.env.DISCOVERY_RESUME_INCOMPLETE || '');
