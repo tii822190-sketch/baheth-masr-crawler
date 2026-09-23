@@ -1,4 +1,4 @@
-name = "baheth-masr-ingest"
+name = "baheth-masr-crawler"
 main = "src/index.js"
 compatibility_date = "2026-09-23"
 
