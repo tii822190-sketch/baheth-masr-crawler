@@ -52,21 +52,19 @@
 يعمل Workflow **Sync Index Results to Turso** يوميًا عند `01:00 UTC`، ويمكن تشغيله يدويًا من GitHub Actions. ينفذ الآتي:
 
 1. يتحقق من وجود جدول `search_pages` في Turso.
-2. يطابق مخطط `search_pages` مع الأعمدة الستة الحالية: `url`, `title`, `description`, `icon_url`, `snippet`, `keywords`.
-3. يرحّل المخطط القديم الذي يستخدم `content` بدل `snippet` عند الحاجة، ويعيد إنشاء `search_pages_fts` إذا كان مفقودًا أو غير مطابق.
-4. ينقل الصفوف المحلية على دفعات باستخدام `upsert` على `url`.
-5. يعيد ملء `search_pages_fts` بالكامل، ويتعامل أيضًا مع جدول Turso القديم `index_results` إن كان موجودًا، ثم يحذفه بعد النقل.
-6. يحذف من SQLite الصفوف المحلية التي نُقلت فقط، داخل معاملة واحدة، ويتحقق من عدد الصفوف المحذوفة.
-7. يفحص سلامة قاعدة SQLite، ويتأكد من تطابق عدد صفوف `search_pages` و`search_pages_fts` وعدم وجود سجلات مكررة أو سجلات يتيمة.
+2. يرسل الصفوف المحلية على دفعات إلى Worker الإدخال، الذي يدمج العنوان والوصف والكلمات المفتاحية والمقتطف والدومين داخل `search_text`.
+3. يحفظ في D1 الأعمدة الأساسية فقط: `url`, `title`, `description`, `icon_url`, `search_text`، ويحدّث فهرس FTS5 لكل رابط.
+4. يحذف من SQLite الصفوف المحلية التي أُكد نجاح إرسالها فقط، داخل معاملة واحدة، ويتحقق من عدد الصفوف المحذوفة.
+5. يفحص سلامة قاعدة SQLite ويتوقف دون حذف أي نتائج محلية إذا فشل Worker أو لم يؤكد استلام الدفعة كاملة.
 
-يستخدم Workflow `TURSO_MAX_ROWS=0` لنقل كل النتائج المتراكمة. ويعيد المحاولة حتى خمس مرات مع تأخير تصاعدي عند فشل طلبات Turso. إذا فشل النقل بعد استنفاد المحاولات، يتوقف التشغيل ولا يحذف النتائج المحلية.
+يستخدم Workflow `INGEST_MAX_ROWS=0` لنقل كل النتائج المتراكمة. ويعيد المحاولة حتى خمس مرات مع تأخير تصاعدي عند فشل طلبات Worker. إذا فشل النقل بعد استنفاد المحاولات، يتوقف التشغيل ولا يحذف النتائج المحلية.
 
 يتطلب Workflow السرّين التاليين في إعدادات المستودع:
 
 | Secret | الوصف |
 | --- | --- |
-| `TURSO_DATABASE_URL` | رابط قاعدة Turso، مثل `libsql://...` |
-| `TURSO_AUTH_TOKEN` | رمز الوصول إلى قاعدة Turso |
+| `INGEST_URL` | رابط Worker الإدخال، مثل `https://baheth-masr-crawler.tii822190.workers.dev` |
+| `INGEST_TOKEN` | نفس قيمة `INGEST_TOKEN` المعرفة في Cloudflare Worker |
 
 ## الجدولة والتزامن
 
@@ -74,7 +72,7 @@
 | --- | --- | --- |
 | **Discovery Spider** | `00:00` و`08:00` و`16:00 UTC` | اكتشاف موقع واحد وإضافة روابطه إلى الطابور |
 | **Page Indexer** | كل ساعة باستثناء أوقات الاكتشاف و`01:00 UTC` | فهرسة ما يصل إلى 1,000 صفحة في التشغيل المجدول |
-| **Sync Index Results to Turso** | يوميًا عند `01:00 UTC` | نقل النتائج المحلية إلى Turso وتنظيفها محليًا |
+| **Sync Index Results to D1 through Worker** | يوميًا عند `01:00 UTC` | إرسال النتائج إلى D1 عبر Worker وتنظيفها محليًا |
 
 تستخدم Workflows الثلاثة مجموعة التزامن `baheth-local-crawler-db` مع `cancel-in-progress: false`. لذلك ينتظر التشغيل الجديد انتهاء التشغيل السابق بدل الكتابة بالتوازي على ملف SQLite. تحفظ Workflows تغييرات `db/crawler.sqlite` في Git، ويرفع Workflow الفهرسة نسخة مؤقتة من القاعدة وملخص التشغيل لمدة سبعة أيام.
 
@@ -106,12 +104,12 @@ npm run crawl:manual
 لتشغيل المزامنة محليًا، عرّف متغيري البيئة ثم شغّل السكربت:
 
 ```bash
-TURSO_DATABASE_URL='libsql://...' \
-TURSO_AUTH_TOKEN='...' \
-node tools/sync-to-turso.mjs
+INGEST_URL='https://baheth-masr-crawler.tii822190.workers.dev' \
+INGEST_TOKEN='...' \
+node tools/sync-to-ingest-worker.mjs
 ```
 
-يمكن التحكم في المزامنة عبر `TURSO_BATCH_SIZE` و`TURSO_MAX_ROWS` و`TURSO_RETRIES`. أسماء الجداول المستهدفة ثابتة في السكربت الحالي: `search_pages` و`search_pages_fts`.
+يمكن التحكم في المزامنة عبر `INGEST_BATCH_SIZE` و`INGEST_MAX_ROWS` و`INGEST_RETRIES`. أسماء الجداول المستهدفة ثابتة داخل Worker: `search_pages` و`search_pages_fts`.
 
 ## هيكل المشروع
 
@@ -121,7 +119,7 @@ crawler/test/                  اختبارات Node.js
 db/crawler.sqlite              قاعدة التشغيل المحلية المحفوظة في Git
 taxonomy/search-taxonomy.json  تصنيف الكلمات والموضوعات
 tools/discovery-spider.mjs     اكتشاف الروابط من Sitemap وChromium
-tools/sync-to-turso.mjs        نقل النتائج إلى Turso
+tools/sync-to-ingest-worker.mjs إرسال النتائج إلى D1 عبر Worker الإدخال
 .github/workflows/             Workflows الاكتشاف والفهرسة والمزامنة
 ```
 

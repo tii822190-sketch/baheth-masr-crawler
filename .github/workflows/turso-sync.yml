@@ -1,4 +1,4 @@
-name: Sync Index Results to Turso
+name: Sync Index Results to D1 through Worker
 
 on:
   workflow_dispatch:
@@ -19,11 +19,11 @@ jobs:
     timeout-minutes: 120
     env:
       CRAWLER_DB_PATH: db/crawler.sqlite
-      TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
-      TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
-      TURSO_BATCH_SIZE: '250'
-      TURSO_MAX_ROWS: '0'
-      TURSO_RETRIES: '5'
+      INGEST_URL: ${{ secrets.INGEST_URL }}
+      INGEST_TOKEN: ${{ secrets.INGEST_TOKEN }}
+      INGEST_BATCH_SIZE: '250'
+      INGEST_MAX_ROWS: '0'
+      INGEST_RETRIES: '5'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -34,12 +34,12 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - name: Validate Turso secrets
+      - name: Validate Worker ingest secrets
         run: |
-          test -n "$TURSO_DATABASE_URL"
-          test -n "$TURSO_AUTH_TOKEN"
-      - name: Transfer index results to Turso using write-only sync
-        run: node tools/sync-to-turso.mjs
+          test -n "$INGEST_URL"
+          test -n "$INGEST_TOKEN"
+      - name: Transfer index results to D1 through Worker
+        run: node tools/sync-to-ingest-worker.mjs
       - name: Verify local database only
         run: |
           node --input-type=module <<'NODE'
@@ -62,9 +62,9 @@ jobs:
               echo "No database changes to commit."
               exit 0
             fi
-            git commit -m "Use write-only Turso synchronization"
+            git commit -m "Use Worker to synchronize index results to D1"
             if git push origin HEAD:main; then
-              echo "Turso sync database pushed successfully on attempt ${attempt}."
+              echo "D1 sync database pushed successfully on attempt ${attempt}."
               exit 0
             fi
             if [ "$attempt" -eq 3 ]; then
@@ -74,5 +74,5 @@ jobs:
             echo "Remote changed during push; refreshing and repeating write-only sync (attempt $((attempt + 1)))."
             git fetch origin main
             git reset --hard origin/main
-            node tools/sync-to-turso.mjs
+            node tools/sync-to-ingest-worker.mjs
           done
