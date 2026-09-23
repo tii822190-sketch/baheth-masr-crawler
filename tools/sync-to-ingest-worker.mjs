@@ -3,7 +3,7 @@ import Database from 'better-sqlite3';
 const localPath = process.env.CRAWLER_DB_PATH || 'db/crawler.sqlite';
 const ingestUrl = String(process.env.INGEST_URL || '').replace(/\/+$/, '');
 const ingestToken = process.env.INGEST_TOKEN;
-const batchSize = Math.min(250, Math.max(1, Number(process.env.INGEST_BATCH_SIZE || 250)));
+const batchSize = Math.min(16, Math.max(1, Number(process.env.INGEST_BATCH_SIZE || 16)));
 const maxRows = Math.max(0, Number(process.env.INGEST_MAX_ROWS || 0));
 const retryCount = Math.max(0, Number(process.env.INGEST_RETRIES || 5));
 

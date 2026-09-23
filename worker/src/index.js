@@ -1,4 +1,4 @@
-const MAX_ROWS = 250;
+const MAX_ROWS = 16;
 const MAX_TEXT_LENGTH = 20000;
 
 function json(value, status = 200) {
@@ -60,8 +60,8 @@ function rowFromInput(input) {
   return { url, title, description, icon_url: clean(input.icon_url), search_text: searchText };
 }
 
-async function upsert(env, row) {
-  await env.DB.prepare(`
+function upsertStatements(env, row) {
+  return [env.DB.prepare(`
     INSERT INTO search_pages (url, title, description, icon_url, search_text)
     VALUES (?, ?, ?, ?, ?)
     ON CONFLICT(url) DO UPDATE SET
@@ -69,9 +69,9 @@ async function upsert(env, row) {
       description=excluded.description,
       icon_url=excluded.icon_url,
       search_text=excluded.search_text
-  `).bind(row.url, row.title, row.description, row.icon_url, row.search_text).run();
-  await env.DB.prepare("DELETE FROM search_pages_fts WHERE url = ?").bind(row.url).run();
-  await env.DB.prepare("INSERT INTO search_pages_fts (url, search_text) VALUES (?, ?)").bind(row.url, row.search_text).run();
+  `).bind(row.url, row.title, row.description, row.icon_url, row.search_text),
+    env.DB.prepare("DELETE FROM search_pages_fts WHERE url = ?").bind(row.url),
+    env.DB.prepare("INSERT INTO search_pages_fts (url, search_text) VALUES (?, ?)").bind(row.url, row.search_text)];
 }
 
 export default {
@@ -93,7 +93,7 @@ export default {
     if (rows.some((row) => !row)) return json({ success: false, error: "Each row needs a valid url and searchable fields" }, 400);
 
     try {
-      for (const row of rows) await upsert(env, row);
+      await env.DB.batch(rows.flatMap((row) => upsertStatements(env, row)));
       return json({ success: true, inserted: rows.length, rows: rows.map(({ url, search_text }) => ({ url, search_text })) });
     } catch (error) {
       console.error("ingest_error", error instanceof Error ? error.message : String(error));

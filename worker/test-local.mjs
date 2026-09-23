@@ -23,6 +23,10 @@ const db = {
       },
     };
   },
+  async batch(statements) {
+    for (const statement of statements) await statement.run();
+    return statements.map(() => ({ success: true }));
+  },
 };
 
 const request = new Request('https://baheth-masr-ingest.workers.dev/', {

@@ -21,7 +21,7 @@ jobs:
       CRAWLER_DB_PATH: db/crawler.sqlite
       INGEST_URL: ${{ secrets.INGEST_URL }}
       INGEST_TOKEN: ${{ secrets.INGEST_TOKEN }}
-      INGEST_BATCH_SIZE: '250'
+      INGEST_BATCH_SIZE: '16'
       INGEST_MAX_ROWS: '0'
       INGEST_RETRIES: '5'
     steps:
