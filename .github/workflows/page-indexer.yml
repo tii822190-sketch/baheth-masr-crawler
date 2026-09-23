@@ -52,43 +52,36 @@ jobs:
       - name: Initialize the local three-table database
         run: node crawler/src/cli.mjs init
       - name: Run up to 1000 queued pages
-        run: |
-          set -e
-          processed_pages=0
-          batch_number=0
-          : > /tmp/primary-crawler-result.json
-          while [ "$processed_pages" -lt "$CRAWLER_MAX_PAGES" ]; do
-            batch_number=$((batch_number + 1))
-            output=$(node crawler/src/cli.mjs manual)
-            echo "===== batch ${batch_number} =====" | tee -a /tmp/primary-crawler-result.json
-            echo "$output" | tee -a /tmp/primary-crawler-result.json
-            processed=$(node -e "const x=JSON.parse(process.argv[1]); console.log(Number(x.total)||0)" "$output")
-            processed_pages=$((processed_pages + processed))
-            if [ "$processed" -eq 0 ]; then break; fi
-          done
-          echo "processed_pages=${processed_pages}" | tee -a /tmp/primary-crawler-result.json
+        run: bash tools/run-primary-crawler.sh
       - name: Verify local database
-        run: |
-          node --input-type=module <<'NODE'
-          import Database from 'better-sqlite3';
-          const db = new Database('db/crawler.sqlite', { readonly: true });
-          const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name").all().map((row) => row.name);
-          if (tables.join(',') !== 'index_results,site_pages,sites') throw new Error(`Unexpected tables: ${tables.join(',')}`);
-          if (db.prepare('PRAGMA integrity_check').get().integrity_check !== 'ok') throw new Error('Database integrity check failed');
-          console.log(JSON.stringify({ tables, index_results: db.prepare('SELECT COUNT(*) AS count FROM index_results').get().count, queued_pages: db.prepare('SELECT COUNT(*) AS count FROM site_pages').get().count }, null, 2));
-          db.close();
-          NODE
+        run: node tools/verify-local-crawler-db.mjs
       - name: Commit updated local database
         run: |
+          set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add db/crawler.sqlite
-          if git diff --cached --quiet; then
-            echo "No database changes to commit."
-          else
+          for attempt in 1 2 3; do
+            git add db/crawler.sqlite
+            if git diff --cached --quiet; then
+              echo "No database changes to commit."
+              exit 0
+            fi
             git commit -m "Run primary crawler and update local database"
-            git push origin HEAD:main
-          fi
+            if git push origin HEAD:main; then
+              echo "Database commit pushed successfully on attempt ${attempt}."
+              exit 0
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              echo "Unable to push database after ${attempt} attempts." >&2
+              exit 1
+            fi
+            echo "Remote changed during push; refreshing database and retrying crawler (attempt $((attempt + 1)))."
+            git fetch origin main
+            git reset --hard origin/main
+            node crawler/src/cli.mjs init
+            bash tools/run-primary-crawler.sh
+            node tools/verify-local-crawler-db.mjs
+          done
       - uses: actions/upload-artifact@v4
         if: always()
         with:
