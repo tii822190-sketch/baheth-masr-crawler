@@ -62,16 +62,10 @@ function rowFromInput(input) {
 
 function upsertStatements(env, row) {
   return [env.DB.prepare(`
-    INSERT INTO search_pages (url, title, description, icon_url, search_text)
+    INSERT OR IGNORE INTO search_pages (url, title, description, icon_url, search_text)
     VALUES (?, ?, ?, ?, ?)
-    ON CONFLICT(url) DO UPDATE SET
-      title=excluded.title,
-      description=excluded.description,
-      icon_url=excluded.icon_url,
-      search_text=excluded.search_text
   `).bind(row.url, row.title, row.description, row.icon_url, row.search_text),
-    env.DB.prepare("DELETE FROM search_pages_fts WHERE url = ?").bind(row.url),
-    env.DB.prepare("INSERT INTO search_pages_fts (url, search_text) VALUES (?, ?)").bind(row.url, row.search_text)];
+    env.DB.prepare("INSERT INTO search_pages_fts (url, search_text) SELECT ?, ? WHERE changes() > 0").bind(row.url, row.search_text)];
 }
 
 export default {
