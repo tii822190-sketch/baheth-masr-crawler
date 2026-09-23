@@ -53,12 +53,26 @@ jobs:
           NODE
       - name: Commit cleaned local database
         run: |
+          set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add db/crawler.sqlite
-          if git diff --cached --quiet; then
-            echo "No database changes to commit."
-          else
+          for attempt in 1 2 3; do
+            git add db/crawler.sqlite
+            if git diff --cached --quiet; then
+              echo "No database changes to commit."
+              exit 0
+            fi
             git commit -m "Use write-only Turso synchronization"
-            git push origin HEAD:main
-          fi
+            if git push origin HEAD:main; then
+              echo "Turso sync database pushed successfully on attempt ${attempt}."
+              exit 0
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              echo "Unable to push Turso sync database after ${attempt} attempts." >&2
+              exit 1
+            fi
+            echo "Remote changed during push; refreshing and repeating write-only sync (attempt $((attempt + 1)))."
+            git fetch origin main
+            git reset --hard origin/main
+            node tools/sync-to-turso.mjs
+          done
