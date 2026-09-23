@@ -44,7 +44,7 @@ const row = rows[0];
 const expected = 'وزارة الأوقاف الموقع الرسمي أهلا بيك في الموقع الرسمي لوزارة الأوقاف وزارة، الأوقاف، الفتوى هذا المقتطف يدخل في نص البحث الموحد karam.com';
 if (response.status !== 200) throw new Error(`Unexpected status: ${response.status}`);
 if (body.inserted !== 1) throw new Error(`Unexpected inserted count: ${body.inserted}`);
-if (row.url !== 'karam.com') throw new Error(`URL was not reduced to domain: ${row.url}`);
+if (row.url !== 'https://www.karam.com/some/page?x=1') throw new Error(`Full page URL was not preserved: ${row.url}`);
 if (row.search_text !== expected) throw new Error(`Unexpected search_text: ${row.search_text}`);
 if (row.search_text.includes('https://') || row.search_text.includes('/some/page')) throw new Error('search_text contains protocol or path');
 if (ftsRows.length !== 1 || ftsRows[0].search_text !== expected) throw new Error('FTS row was not written correctly');

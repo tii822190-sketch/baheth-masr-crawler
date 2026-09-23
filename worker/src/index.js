@@ -31,17 +31,31 @@ function siteDomain(value) {
   }
 }
 
+function pageUrl(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  try {
+    const parsed = new URL(/^[a-z][a-z\d+.-]*:\/\//i.test(raw) ? raw : `https://${raw}`);
+    if (!["http:", "https:"].includes(parsed.protocol)) return "";
+    parsed.hash = "";
+    return parsed.toString();
+  } catch {
+    return "";
+  }
+}
+
 function clean(value) {
   return String(value || "").replace(/\s+/g, " ").trim().slice(0, MAX_TEXT_LENGTH);
 }
 
 function rowFromInput(input) {
-  const url = siteDomain(input.url || input.domain || input.site_url);
+  const url = pageUrl(input.url || input.page_url || input.site_url || input.domain);
   const title = clean(input.title);
   const description = clean(input.description);
   const keywords = clean(input.keywords);
   const snippet = clean(input.snippet || input.content);
-  const searchText = clean([title, description, keywords, snippet, url].filter(Boolean).join(" "));
+  const domain = siteDomain(url);
+  const searchText = clean([title, description, keywords, snippet, domain].filter(Boolean).join(" "));
   if (!url || !searchText) return null;
   return { url, title, description, icon_url: clean(input.icon_url), search_text: searchText };
 }
