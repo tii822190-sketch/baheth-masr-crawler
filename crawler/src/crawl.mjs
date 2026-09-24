@@ -20,19 +20,6 @@ const browserBinary = process.env.CRAWLER_BROWSER_BIN || [
 ].find((candidate) => fs.existsSync(candidate)) || 'chromium';
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-export function describeError(error) {
-  const chain = [];
-  let current = error;
-  for (let depth = 0; current && depth < 5; depth += 1, current = current.cause) {
-    const item = {};
-    for (const key of ['name', 'message', 'code', 'errno', 'syscall', 'hostname', 'port', 'signal']) {
-      if (current[key] !== undefined && current[key] !== null) item[key] = String(current[key]).slice(0, 300);
-    }
-    chain.push(item);
-  }
-  return JSON.stringify(chain);
-}
-
 function acquireBatch() {
   db.prepare("UPDATE site_pages SET crawl_status='pending' WHERE crawl_status='processing'").run();
   const pending = db.prepare(`
@@ -58,18 +45,13 @@ function acquireBatch() {
   return { targets: candidates, phase: pending.length ? 'pending' : 'review' };
 }
 
-export function acquireBrowserSlot(state) {
+function acquireBrowserSlot(state) {
   if (state.active < state.limit) { state.active += 1; return Promise.resolve(); }
   return new Promise((resolve) => state.waiters.push(resolve));
 }
-export function releaseBrowserSlot(state) {
-  const next = state.waiters.shift();
-  if (next) {
-    // Transfer the occupied slot directly to the waiter; active remains reserved.
-    next();
-    return;
-  }
-  state.active = Math.max(0, state.active - 1);
+function releaseBrowserSlot(state) {
+  state.active -= 1;
+  state.waiters.shift()?.();
 }
 
 async function browserFetch(url, browserState) {
@@ -83,22 +65,14 @@ async function browserFetch(url, browserState) {
       ], { stdio: ['ignore', 'pipe', 'pipe'] });
       let body = '';
       let error = '';
-      let timedOut = false;
-      const timer = setTimeout(() => {
-        timedOut = true;
-        child.kill('SIGKILL');
-      }, pageTimeoutMs);
+      const timer = setTimeout(() => { child.kill('SIGKILL'); reject(new Error('browser_timeout')); }, pageTimeoutMs);
       child.stdout.on('data', (chunk) => { body += chunk; });
-      child.stderr.on('data', (chunk) => { error = `${error}${chunk}`.slice(-4000); });
-      child.once('error', (spawnError) => { clearTimeout(timer); reject(new Error(`browser_spawn_error: ${describeError(spawnError)}`)); });
+      child.stderr.on('data', (chunk) => { error += chunk; });
+      child.once('error', (spawnError) => { clearTimeout(timer); reject(spawnError); });
       child.on('close', (code) => {
         clearTimeout(timer);
-        if (timedOut) {
-          reject(new Error(`browser_timeout: ${JSON.stringify({ timeoutMs: pageTimeoutMs, stdoutBytes: Buffer.byteLength(body), stderrTail: error.slice(-1000), exitCode: code, pid: child.pid })}`));
-          return;
-        }
         if (code === 0 && body.trim()) resolve({ url, responseUrl: url, status: 200, contentType: 'text/html', body, duration: Date.now() - started, method: 'browser' });
-        else reject(new Error(`browser_exit_${code}: ${error.trim().slice(-1000)}`));
+        else reject(new Error(error.trim().slice(-300) || `browser_exit_${code}`));
       });
     });
   } finally {
@@ -143,8 +117,8 @@ export async function fetchOne(url, browserState, { httpFetcher = httpFetch, bro
         http = { ...(await httpFetcher(url)), fetchAttempts };
       } catch (httpError) {
         if (fetchMode !== 'hybrid') throw httpError;
-        const httpFetchError = describeError(httpError).slice(0, 1000);
-        const httpFetchErrorCode = httpError?.name === 'AbortError' || /timeout|ETIMEDOUT|UND_ERR_CONNECT_TIMEOUT/i.test(httpFetchError) ? 'timeout' : 'fetch_error';
+        const httpFetchError = String(httpError).slice(0, 500);
+        const httpFetchErrorCode = httpError?.name === 'AbortError' || /timeout/i.test(httpFetchError) ? 'timeout' : 'fetch_error';
         try {
           const browser = await browserFetcher(url, browserState);
           return {
@@ -157,7 +131,7 @@ export async function fetchOne(url, browserState, { httpFetcher = httpFetch, bro
             httpDurationMs: Date.now() - httpStarted,
           };
         } catch (browserError) {
-          const browserFallbackError = String(browserError).slice(0, 1500);
+          const browserFallbackError = String(browserError).slice(0, 500);
           lastError = `http_${httpFetchErrorCode}: ${httpFetchError}; browser_fallback_error: ${browserFallbackError}`;
           if (attempt < retries) {
             await sleep(Math.min(5000, 500 * (attempt + 1)));
