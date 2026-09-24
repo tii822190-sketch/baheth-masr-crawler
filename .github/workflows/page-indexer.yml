@@ -6,13 +6,17 @@ on:
       batch_size:
         description: Pages per batch
         required: false
-        default: '5'
+        default: '2000'
         type: string
       max_pages:
         description: Maximum pages per run
         required: false
-        default: '5'
+        default: '2000'
         type: string
+  schedule:
+    # Run hourly except at 01:00 for Turso sync and at 00:00, 08:00, and 16:00 UTC for discovery.
+    - cron: '0 2-7,9-15,17-23 * * *'
+
 concurrency:
   group: baheth-local-crawler-db
   cancel-in-progress: false
