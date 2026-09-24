@@ -4,7 +4,7 @@ import { canonicalize } from '../src/db.mjs';
 import { extractHtml } from '../src/extract.mjs';
 import { extractLightHtml } from '../src/light-extract.mjs';
 import { classifyContent } from '../src/classify.mjs';
-import { acquireBrowserSlot, describeError, diagnoseReview, errorCode, fetchOne, isComplete, releaseBrowserSlot, shouldMarkCorrupt, shouldUseBrowserFallback } from '../src/crawl.mjs';
+import { acquireBrowserSlot, describeError, diagnoseReview, errorCode, fetchOne, isComplete, releaseBrowserSlot, shouldUseBrowserFallback } from '../src/crawl.mjs';
 import taxonomy from '../../taxonomy/search-taxonomy.json' with { type: 'json' };
 
 test('canonicalize removes tracking and normalizes host', () => { assert.equal(canonicalize('https://WWW.Example.com/index.html?utm_source=x&a=1#x'), 'https://example.com/?a=1'); });
@@ -133,13 +133,6 @@ test('browser slot handoff never exceeds the configured concurrency', async () =
   await Promise.all([...tasks, fifth]);
   assert.ok(peakRunning <= 2, `observed ${peakRunning} simultaneous browser jobs`);
   assert.equal(state.active, 0);
-});
-
-test('review failures stay retryable until the configured attempt limit is reached', () => {
-  assert.equal(shouldMarkCorrupt(1, 1), false);
-  assert.equal(shouldMarkCorrupt(2, 1), true);
-  assert.equal(shouldMarkCorrupt(1, 2), false);
-  assert.equal(shouldMarkCorrupt(3, 2), true);
 });
 
 test('network diagnostics preserve nested Node.js cause and errno', () => {

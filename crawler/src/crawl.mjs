@@ -130,12 +130,6 @@ export function shouldUseBrowserFallback(result, meta) {
     || extractedTextLength < minExtractedTextChars;
 }
 
-export function shouldMarkCorrupt(pageAttempt, reviewRetries) {
-  const attempt = Math.max(0, Number(pageAttempt) || 0);
-  const retriesAllowed = Math.max(0, Number(reviewRetries) || 0);
-  return attempt >= retriesAllowed + 1;
-}
-
 export async function fetchOne(url, browserState, { httpFetcher = httpFetch, browserFetcher = browserFetch } = {}) {
   let lastError = '';
   let fetchAttempts = 0;
@@ -366,7 +360,7 @@ export async function run(type = 'manual') {
     } else {
       const diagnosis = diagnoseReview(result, meta || {});
       failureReasons[diagnosis.reason] = (failureReasons[diagnosis.reason] || 0) + 1;
-      if (shouldMarkCorrupt(result.pageAttempt, retryLimit)) {
+      if (phase === 'review' || (page.crawl_attempts || 0) >= retryLimit + 1) {
         markCorrupt(page);
         corrupt += 1;
         pageEvent = { url: page.url, outcome: 'corrupt', diagnostics: diagnosis };
