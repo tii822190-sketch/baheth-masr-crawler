@@ -4,7 +4,7 @@ import { canonicalize } from '../src/db.mjs';
 import { extractHtml } from '../src/extract.mjs';
 import { extractLightHtml } from '../src/light-extract.mjs';
 import { classifyContent } from '../src/classify.mjs';
-import { diagnoseReview, errorCode, fetchOne, isComplete, shouldUseBrowserFallback } from '../src/crawl.mjs';
+import { acquireBrowserSlot, describeError, diagnoseReview, errorCode, fetchOne, isComplete, releaseBrowserSlot, shouldUseBrowserFallback } from '../src/crawl.mjs';
 import taxonomy from '../../taxonomy/search-taxonomy.json' with { type: 'json' };
 
 test('canonicalize removes tracking and normalizes host', () => { assert.equal(canonicalize('https://WWW.Example.com/index.html?utm_source=x&a=1#x'), 'https://example.com/?a=1'); });
@@ -92,6 +92,57 @@ test('hybrid fetching reports HTTP timeout and browser fallback failure together
   assert.equal(diagnosis.httpFetchErrorCode, 'timeout');
   assert.match(diagnosis.browserFallbackError, /Chromium navigation timeout/);
   assert.match(diagnosis.error, /HTTP socket timeout/);
+});
+
+test('browser slot handoff never exceeds the configured concurrency', async () => {
+  const state = { active: 0, limit: 2, waiters: [] };
+  let running = 0;
+  let peakRunning = 0;
+  let started = 0;
+  const startWaiters = [];
+  const gates = Array.from({ length: 5 }, () => {
+    let release;
+    return { promise: new Promise((resolve) => { release = resolve; }), release: () => release() };
+  });
+  const job = async (gate) => {
+    await acquireBrowserSlot(state);
+    running += 1;
+    started += 1;
+    peakRunning = Math.max(peakRunning, running);
+    startWaiters.shift()?.();
+    await gate.promise;
+    running -= 1;
+    releaseBrowserSlot(state);
+  };
+  const waitForStarted = async (count) => {
+    while (started < count) await new Promise((resolve) => startWaiters.push(resolve));
+  };
+  const tasks = gates.slice(0, 4).map(job);
+  await waitForStarted(2);
+  gates[0].release();
+  await waitForStarted(3);
+  gates[1].release();
+  await waitForStarted(4);
+  const fifth = job(gates[4]);
+  await Promise.resolve();
+  assert.equal(started, 4, 'a new browser job must wait while two slots are occupied');
+  gates[2].release();
+  await waitForStarted(5);
+  gates[3].release();
+  gates[4].release();
+  await Promise.all([...tasks, fifth]);
+  assert.ok(peakRunning <= 2, `observed ${peakRunning} simultaneous browser jobs`);
+  assert.equal(state.active, 0);
+});
+
+test('network diagnostics preserve nested Node.js cause and errno', () => {
+  const cause = Object.assign(new Error('connect ECONNRESET'), { code: 'ECONNRESET', syscall: 'connect', hostname: 'digital.gov.eg', port: 443 });
+  const error = new TypeError('fetch failed', { cause });
+  const details = JSON.parse(describeError(error));
+  assert.equal(details[0].message, 'fetch failed');
+  assert.equal(details[1].code, 'ECONNRESET');
+  assert.equal(details[1].hostname, 'digital.gov.eg');
+  assert.equal(details[1].port, '443');
 });
 
 test('review diagnostics retain actionable reason and missing required fields', () => {
