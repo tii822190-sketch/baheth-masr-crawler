@@ -106,10 +106,12 @@ export function shouldUseBrowserFallback(result, meta) {
 
 async function fetchOne(url, browserState) {
   let lastError = '';
+  let fetchAttempts = 0;
   for (let attempt = 0; attempt <= retries; attempt += 1) {
+    fetchAttempts = attempt + 1;
     try {
-      if (fetchMode === 'browser') return await browserFetch(url, browserState);
-      const http = await httpFetch(url);
+      if (fetchMode === 'browser') return { ...(await browserFetch(url, browserState)), fetchAttempts };
+      const http = { ...(await httpFetch(url)), fetchAttempts };
       if (fetchMode === 'hybrid') {
         const httpMeta = extractHtml(http.body, http.responseUrl || http.url, http.contentType || 'text/html');
         if (shouldUseBrowserFallback(http, httpMeta)) {
@@ -119,11 +121,11 @@ async function fetchOne(url, browserState) {
             const httpTextLength = String(httpMeta.extractedText || '').trim().length;
             const browserTextLength = String(browserMeta.extractedText || '').trim().length;
             if (browserTextLength > httpTextLength) {
-              return { ...browser, browserFallbackAttempted: true, browserFallbackFromStatus: http.status };
+              return { ...browser, fetchAttempts, browserFallbackAttempted: true, browserFallbackFromStatus: http.status, browserFallbackChoice: 'browser', browserFallbackHttpTextLength: httpTextLength, browserFallbackRenderedTextLength: browserTextLength, httpDurationMs: http.duration };
             }
-            return { ...http, browserFallbackAttempted: true, browserFallbackError: 'rendered_text_not_improved' };
+            return { ...http, browserFallbackAttempted: true, browserFallbackChoice: 'http', browserFallbackHttpTextLength: httpTextLength, browserFallbackRenderedTextLength: browserTextLength, browserFallbackError: 'rendered_text_not_improved' };
           } catch (error) {
-            return { ...http, browserFallbackAttempted: true, browserFallbackError: String(error).slice(0, 240) };
+            return { ...http, browserFallbackAttempted: true, browserFallbackChoice: 'http', browserFallbackError: String(error).slice(0, 240) };
           }
         }
       }
@@ -133,7 +135,7 @@ async function fetchOne(url, browserState) {
       if (attempt < retries) await sleep(Math.min(5000, 500 * (attempt + 1)));
     }
   }
-  return { url, responseUrl: '', status: 0, contentType: '', body: '', duration: pageTimeoutMs, method: fetchMode, error: lastError };
+  return { url, responseUrl: '', status: 0, contentType: '', body: '', duration: pageTimeoutMs, method: fetchMode, fetchAttempts, error: lastError };
 }
 
 async function mapLimit(items, worker, limit) {
@@ -178,6 +180,7 @@ function compactMeta(result) {
     snippet: clean(meta.searchSnippet || meta.summary || meta.description),
     qualityStatus: meta.qualityStatus || 'unknown',
     extractedTextLength: String(meta.extractedText || '').trim().length,
+    extractedTextExcerpt: clean(meta.extractedText, 300),
   };
 }
 export function isComplete(result, meta) {
@@ -205,10 +208,27 @@ export function diagnoseReview(result, meta) {
     missingFields,
     qualityStatus: meta.qualityStatus || 'unknown',
     extractedTextLength,
+    extractedTextExcerpt: String(meta.extractedTextExcerpt || '').slice(0, 300),
+    observedMetadata: Object.fromEntries(['url', 'title', 'description', 'iconUrl', 'keywords', 'snippet'].map((field) => [field, String(meta[field] || '').slice(0, field === 'snippet' ? 320 : 500)])),
+    ...fetchTrace(result),
+    ...(result.error ? { error: String(result.error).slice(0, 500) } : {}),
+  };
+}
+function fetchTrace(result) {
+  return {
     httpStatus: Number(result.status || 0),
     contentType: String(result.contentType || '').slice(0, 100),
+    responseUrl: String(result.responseUrl || result.url || '').slice(0, 1000),
     fetchMethod: result.method || fetchMode,
+    durationMs: Number(result.duration || 0),
+    fetchAttempts: Number(result.fetchAttempts || 0),
+    pageAttempt: Number(result.pageAttempt || 0),
     browserFallbackAttempted: Boolean(result.browserFallbackAttempted),
+    ...(result.browserFallbackChoice ? { browserFallbackChoice: result.browserFallbackChoice } : {}),
+    ...(result.browserFallbackFromStatus ? { browserFallbackFromStatus: result.browserFallbackFromStatus } : {}),
+    ...(Number.isFinite(result.httpDurationMs) ? { httpDurationMs: Number(result.httpDurationMs) } : {}),
+    ...(Number.isFinite(result.browserFallbackHttpTextLength) ? { browserFallbackHttpTextLength: Number(result.browserFallbackHttpTextLength) } : {}),
+    ...(Number.isFinite(result.browserFallbackRenderedTextLength) ? { browserFallbackRenderedTextLength: Number(result.browserFallbackRenderedTextLength) } : {}),
     ...(result.browserFallbackError ? { browserFallbackError: result.browserFallbackError } : {}),
   };
 }
@@ -224,13 +244,12 @@ function saveSuccessful(meta) {
 function removeFromQueue(pageId) {
   db.prepare('DELETE FROM site_pages WHERE id=?').run(pageId);
 }
-function markNeedsReview(page, result, meta) {
-  const details = JSON.stringify(diagnoseReview(result, meta));
-  db.prepare(`UPDATE site_pages SET crawl_status='needs_review',review_details=? WHERE id=?`).run(details, page.id);
+function markNeedsReview(page) {
+  db.prepare(`UPDATE site_pages SET crawl_status='needs_review' WHERE id=?`).run(page.id);
 }
-function markCorrupt(page, result, meta) {
-  const details = JSON.stringify(diagnoseReview(result, meta));
-  db.prepare(`UPDATE site_pages SET crawl_status='corrupt',review_details=? WHERE id=?`).run(details, page.id);
+function markCorrupt(page) {
+  db.prepare(`UPDATE site_pages SET crawl_status='corrupt' WHERE id=?`).run(page.id);
+  removeFromQueue(page.id);
 }
 
 export async function run(type = 'manual') {
@@ -238,27 +257,44 @@ export async function run(type = 'manual') {
   const { targets, phase } = acquireBatch();
   let success = 0; let review = 0; let corrupt = 0;
   const failureReasons = {};
+  const pages = [];
   const fetched = await mapLimit(targets, (page) => fetchOne(page.url, browserState), concurrency);
   for (let i = 0; i < targets.length; i += 1) {
     const page = targets[i];
     const result = fetched[i];
+    result.pageAttempt = (page.crawl_attempts || 0) + 1;
     let meta = null;
     try { meta = compactMeta(result); } catch { meta = null; }
     if (meta && isComplete(result, meta)) {
       saveSuccessful(meta);
       removeFromQueue(page.id);
       success += 1;
+      pages.push({
+        url: page.url,
+        outcome: 'indexed',
+        request: fetchTrace(result),
+        extracted: {
+          canonicalUrl: meta.url,
+          title: meta.title,
+          description: meta.description,
+          iconUrl: meta.iconUrl,
+          keywords: meta.keywords,
+          snippet: meta.snippet,
+        },
+      });
     } else {
       const diagnosis = diagnoseReview(result, meta || {});
       failureReasons[diagnosis.reason] = (failureReasons[diagnosis.reason] || 0) + 1;
       if (phase === 'review' || (page.crawl_attempts || 0) >= retryLimit + 1) {
-        markCorrupt(page, result, meta || {});
+        markCorrupt(page);
         corrupt += 1;
+        pages.push({ url: page.url, outcome: 'corrupt', diagnostics: diagnosis });
       } else {
-        markNeedsReview(page, result, meta || {});
+        markNeedsReview(page);
         review += 1;
+        pages.push({ url: page.url, outcome: 'needs_review', diagnostics: diagnosis });
       }
     }
   }
-  return { phase, total: targets.length, success, needs_review: review, failure_reasons: failureReasons, corrupt, batch_size: batchSize, concurrency, browser_concurrency: browserConcurrency, retries, fetch_mode: fetchMode };
+  return { phase, total: targets.length, success, needs_review: review, failure_reasons: failureReasons, corrupt, batch_size: batchSize, concurrency, browser_concurrency: browserConcurrency, retries, fetch_mode: fetchMode, pages };
 }

@@ -95,7 +95,6 @@ function ensureSiteStatusConstraint() {
 export function initDb() {
   createCoreTables();
   ensureSiteStatusConstraint();
-  if (!columns('site_pages').includes('review_details')) db.exec('ALTER TABLE site_pages ADD COLUMN review_details TEXT');
   const integrity = db.prepare('PRAGMA integrity_check').get().integrity_check;
   if (integrity !== 'ok') throw new Error(`Database integrity check failed: ${integrity}`);
 }

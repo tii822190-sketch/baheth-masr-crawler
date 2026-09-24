@@ -60,6 +60,9 @@ test('review diagnostics retain actionable reason and missing required fields', 
   const diagnosis = diagnoseReview(result, { title: 'عنوان', qualityStatus: 'dynamic_content', extractedTextLength: 0 });
   assert.equal(diagnosis.reason, 'dynamic_content');
   assert.deepEqual(diagnosis.missingFields, ['url', 'description', 'iconUrl', 'keywords', 'snippet']);
+  assert.equal(diagnosis.observedMetadata.title, 'عنوان');
+  assert.equal(diagnosis.observedMetadata.description, '');
+  assert.equal(diagnosis.extractedTextExcerpt, '');
   assert.equal(diagnosis.httpStatus, 200);
   assert.equal(diagnosis.fetchMethod, 'http');
   assert.equal(diagnoseReview({ status: 403, contentType: 'text/html', method: 'http' }, {}).reason, 'http_403');
