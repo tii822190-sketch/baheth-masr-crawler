@@ -163,10 +163,10 @@ export function errorCode(result = {}, output = {}) {
   if (output.meta?.qualityStatus && output.meta.qualityStatus !== 'good') return output.meta.qualityStatus;
   return 'unknown';
 }
-function mergedKeywords(meta) {
+export function buildSearchKeywords(meta) {
   const category = taxonomy.categories.find((item) => item.id === meta.categoryCandidate);
   const subcategories = (meta.subcategoryCandidates || []).map((id) => category?.subcategories?.find((item) => item.id === id)).filter(Boolean);
-  const values = [category?.name_ar, ...(category?.keywords_ar || []), ...subcategories.map((item) => item.name_ar), ...subcategories.flatMap((item) => item.keywords_ar || []), ...(meta.classificationReasons || []).map((item) => item.keyword)];
+  const values = [category?.name_ar, category?.name_en, ...subcategories.flatMap((item) => [item.name_ar, item.name_en]), ...(meta.matchedKeywords || []), ...(meta.classificationReasons || []).map((item) => item.keyword)];
   return [...new Set(values.map((value) => clean(value, 80)).filter(Boolean))].join('، ');
 }
 function compactMeta(result) {
@@ -176,7 +176,7 @@ function compactMeta(result) {
     title: clean(meta.title),
     description: clean(meta.description),
     iconUrl: clean(meta.iconUrl, 1000),
-    keywords: mergedKeywords(meta),
+    keywords: buildSearchKeywords(meta),
     snippet: clean(meta.searchSnippet || meta.summary || meta.description),
     qualityStatus: meta.qualityStatus || 'unknown',
     extractedTextLength: String(meta.extractedText || '').trim().length,

@@ -13,7 +13,17 @@
         "مصحف",
         "تلاوة",
         "سورة",
-        "آية"
+        "آية",
+        "القرآن الكريم",
+        "آيات القرآن",
+        "القراءة القرآنية",
+        "حفظ القرآن",
+        "تحفيظ القرآن",
+        "تجويد",
+        "قراءات قرآنية",
+        "القراءات العشر",
+        "مقرأة إلكترونية",
+        "علوم قرآنية"
       ],
       "subcategories": [
         {
@@ -22,12 +32,17 @@
           "keywords_ar": [
             "قراءة",
             "مصحف إلكتروني",
-            "سور"
+            "سور",
+            "قراءة المصحف",
+            "تصفح المصحف",
+            "المصحف الشريف"
           ],
           "keywords_en": [
             "quran reading",
             "read quran",
-            "online quran"
+            "online quran",
+            "Mushaf reader",
+            "Quran reader"
           ]
         },
         {
@@ -36,12 +51,17 @@
           "keywords_ar": [
             "تفسير",
             "معاني الآيات",
-            "علوم القرآن"
+            "علوم القرآن",
+            "تدبر القرآن",
+            "أسباب النزول",
+            "إعراب القرآن"
           ],
           "keywords_en": [
             "quran tafsir",
             "quran commentary",
-            "interpretation"
+            "interpretation",
+            "Quran exegesis",
+            "asbab al-nuzul"
           ]
         },
         {
@@ -51,12 +71,17 @@
             "تلاوة",
             "قارئ",
             "صوت",
-            "استماع"
+            "استماع",
+            "تلاوة مرتلة",
+            "تلاوات القرآن",
+            "قرآن صوتي"
           ],
           "keywords_en": [
             "quran audio",
             "quran recitation",
-            "listen quran"
+            "listen quran",
+            "Quran recitation audio",
+            "Quran reciter"
           ]
         },
         {
@@ -65,12 +90,17 @@
           "keywords_ar": [
             "تحميل",
             "تنزيل",
-            "رابط تحميل"
+            "رابط تحميل",
+            "تحميل المصحف",
+            "تحميل التلاوات",
+            "تنزيل المصحف"
           ],
           "keywords_en": [
             "quran download",
             "download quran",
-            "mp3 quran"
+            "mp3 quran",
+            "download Mushaf",
+            "Quran mp3 download"
           ]
         },
         {
@@ -79,11 +109,14 @@
           "keywords_ar": [
             "ترجمة",
             "معاني القرآن",
-            "لغات"
+            "لغات",
+            "ترجمة القرآن",
+            "ترجمة معاني الآيات"
           ],
           "keywords_en": [
             "quran translation",
-            "quran translations"
+            "quran translations",
+            "Quran meaning translation"
           ]
         }
       ],
@@ -94,7 +127,15 @@
         "recitation",
         "tafsir",
         "surah",
-        "ayah"
+        "ayah",
+        "Quranic",
+        "Quran recitation",
+        "Quran memorization",
+        "Quran reading",
+        "tajweed",
+        "Mushaf",
+        "Quran verses",
+        "Quranic studies"
       ]
     },
     {
@@ -106,7 +147,17 @@
         "كتاب",
         "مكتبة",
         "قراءة",
-        "روايات"
+        "روايات",
+        "دار نشر",
+        "نشر الكتب",
+        "ناشر",
+        "مؤلف",
+        "إصدارات الكتب",
+        "كتب إلكترونية",
+        "كتب صوتية",
+        "رواية",
+        "قصص",
+        "مراجعات الكتب"
       ],
       "subcategories": [
         {
@@ -115,11 +166,16 @@
           "keywords_ar": [
             "علمي",
             "علوم",
-            "مراجع"
+            "مراجع",
+            "كتاب أكاديمي",
+            "موسوعة علمية",
+            "مراجع أكاديمية"
           ],
           "keywords_en": [
             "scientific books",
-            "science books"
+            "science books",
+            "academic books",
+            "reference books"
           ]
         },
         {
@@ -128,11 +184,16 @@
           "keywords_ar": [
             "دراسي",
             "مناهج",
-            "مذكرات"
+            "مذكرات",
+            "كتب تعليمية",
+            "كتاب مدرسي",
+            "مناهج دراسية"
           ],
           "keywords_en": [
             "educational books",
-            "textbooks"
+            "textbooks",
+            "school books",
+            "study guides"
           ]
         },
         {
@@ -141,10 +202,15 @@
           "keywords_ar": [
             "إسلامية",
             "دينية",
-            "فقه"
+            "فقه",
+            "كتب إسلامية",
+            "كتب فقهية",
+            "تراث إسلامي"
           ],
           "keywords_en": [
-            "religious books"
+            "religious books",
+            "Islamic books",
+            "faith books"
           ]
         },
         {
@@ -152,11 +218,16 @@
           "name_ar": "كتب أطفال",
           "keywords_ar": [
             "أطفال",
-            "قصص أطفال"
+            "قصص أطفال",
+            "أدب الأطفال",
+            "قصص للصغار",
+            "كتب ناشئة"
           ],
           "keywords_en": [
             "children books",
-            "kids books"
+            "kids books",
+            "childrens literature",
+            "picture books"
           ]
         },
         {
@@ -165,12 +236,17 @@
           "keywords_ar": [
             "مكتبة رقمية",
             "كتب إلكترونية",
-            "قراءة أونلاين"
+            "قراءة أونلاين",
+            "مكتبة إلكترونية",
+            "فهرس الكتب",
+            "تحميل الكتب الإلكترونية"
           ],
           "keywords_en": [
             "digital library",
             "ebooks",
-            "electronic books"
+            "electronic books",
+            "online library",
+            "digital books"
           ]
         }
       ],
@@ -180,7 +256,15 @@
         "library",
         "libraries",
         "novel",
-        "reading"
+        "reading",
+        "book publishing",
+        "publisher",
+        "bookstore",
+        "book review",
+        "audiobooks",
+        "fiction",
+        "ebooks",
+        "reading list"
       ]
     },
     {
@@ -192,7 +276,16 @@
         "دراسة",
         "طلاب",
         "تعلم",
-        "منهج"
+        "منهج",
+        "تعليم إلكتروني",
+        "تعلم عن بعد",
+        "تعليم عن بعد",
+        "منح دراسية",
+        "امتحانات",
+        "اختبارات",
+        "شهادة تعليمية",
+        "بوابة تعليمية",
+        "تعليم عالي"
       ],
       "subcategories": [
         {
@@ -202,12 +295,20 @@
             "جامعة",
             "كلية",
             "معهد",
-            "بحث جامعي"
+            "بحث جامعي",
+            "جامعة حكومية",
+            "جامعة خاصة",
+            "كليات جامعية",
+            "قبول جامعي",
+            "تنسيق الجامعات"
           ],
           "keywords_en": [
             "university",
             "college",
-            "higher education"
+            "higher education",
+            "university admissions",
+            "campus",
+            "undergraduate"
           ]
         },
         {
@@ -216,12 +317,19 @@
           "keywords_ar": [
             "مدرسة",
             "مدارس",
-            "تعليم أساسي"
+            "تعليم أساسي",
+            "تعليم ابتدائي",
+            "تعليم ثانوي",
+            "وزارة التربية والتعليم",
+            "الصف الدراسي"
           ],
           "keywords_en": [
             "school",
             "schools",
-            "primary education"
+            "primary education",
+            "secondary school",
+            "K-12",
+            "school admission"
           ]
         },
         {
@@ -231,13 +339,20 @@
             "كورس",
             "دورة",
             "منصة تعليمية",
-            "تدريب"
+            "تدريب",
+            "تعليم عن بعد",
+            "دروس أونلاين",
+            "منصة تدريب",
+            "تعلم إلكتروني"
           ],
           "keywords_en": [
             "course",
             "courses",
             "online learning",
-            "training"
+            "training",
+            "e-learning course",
+            "online class",
+            "tutorial"
           ]
         },
         {
@@ -246,12 +361,19 @@
           "keywords_ar": [
             "بحث علمي",
             "مجلة علمية",
-            "دراسة"
+            "دراسة",
+            "أطروحة علمية",
+            "رسالة جامعية",
+            "دورية علمية",
+            "نشر بحث"
           ],
           "keywords_en": [
             "research",
             "scientific research",
-            "academic study"
+            "academic study",
+            "peer-reviewed research",
+            "thesis",
+            "journal article"
           ]
         }
       ],
@@ -266,7 +388,14 @@
         "university",
         "college",
         "course",
-        "training"
+        "training",
+        "e-learning",
+        "distance learning",
+        "online education",
+        "scholarship",
+        "examination",
+        "educational portal",
+        "higher learning"
       ]
     },
     {
@@ -279,7 +408,18 @@
         "طبيب",
         "مستشفى",
         "عيادة",
-        "صيدلية"
+        "صيدلية",
+        "رعاية صحية",
+        "رعاية طبية",
+        "علاج",
+        "علاجات",
+        "صحة عامة",
+        "تأمين صحي",
+        "طب الأسنان",
+        "طب الأطفال",
+        "أمراض",
+        "جراحة",
+        "مركز طبي"
       ],
       "subcategories": [
         {
@@ -287,11 +427,16 @@
           "name_ar": "مستشفيات",
           "keywords_ar": [
             "مستشفى",
-            "مستشفيات"
+            "مستشفيات",
+            "مركز علاج",
+            "قسم الطوارئ",
+            "مستشفى جامعي"
           ],
           "keywords_en": [
             "hospital",
-            "hospitals"
+            "hospitals",
+            "medical center",
+            "emergency department"
           ]
         },
         {
@@ -300,12 +445,18 @@
           "keywords_ar": [
             "عيادة",
             "دكتور",
-            "طبيب"
+            "طبيب",
+            "عيادة طبية",
+            "طبيب متخصص",
+            "مركز عيادات",
+            "كشف طبي"
           ],
           "keywords_en": [
             "clinic",
             "clinics",
-            "doctor"
+            "doctor",
+            "medical practice",
+            "specialist physician"
           ]
         },
         {
@@ -314,12 +465,17 @@
           "keywords_ar": [
             "صيدلية",
             "دواء",
-            "أدوية"
+            "أدوية",
+            "علاج دوائي",
+            "مستلزمات طبية",
+            "صرف الدواء"
           ],
           "keywords_en": [
             "pharmacy",
             "pharmacies",
-            "medication"
+            "medication",
+            "prescription",
+            "pharmaceutical"
           ]
         },
         {
@@ -328,12 +484,17 @@
           "keywords_ar": [
             "معمل",
             "تحاليل",
-            "أشعة"
+            "أشعة",
+            "مختبر طبي",
+            "فحوصات طبية",
+            "تحاليل مخبرية"
           ],
           "keywords_en": [
             "laboratory",
             "lab",
-            "medical tests"
+            "medical tests",
+            "diagnostic testing",
+            "medical laboratory"
           ]
         }
       ],
@@ -346,7 +507,16 @@
         "clinic",
         "pharmacy",
         "drug",
-        "medicine"
+        "medicine",
+        "healthcare",
+        "medical care",
+        "treatment",
+        "public health",
+        "health insurance",
+        "dental care",
+        "pediatrics",
+        "surgery",
+        "medical center"
       ]
     },
     {
@@ -358,7 +528,13 @@
         "حكومي",
         "وزارة",
         "محافظة",
-        "خدمات حكومية"
+        "خدمات حكومية",
+        "بوابة حكومية",
+        "جهة حكومية",
+        "قطاع حكومي",
+        "خدمات المواطنين",
+        "خدمات إلكترونية حكومية",
+        "مؤسسة حكومية"
       ],
       "subcategories": [
         {
@@ -367,11 +543,17 @@
           "keywords_ar": [
             "خدمة حكومية",
             "استخراج",
-            "استعلام"
+            "استعلام",
+            "الخدمات الإلكترونية",
+            "بوابة الخدمات",
+            "طلب خدمة حكومية",
+            "دفع رسوم حكومية"
           ],
           "keywords_en": [
             "government services",
-            "public service"
+            "public service",
+            "online government services",
+            "public administration service"
           ]
         },
         {
@@ -380,12 +562,19 @@
           "keywords_ar": [
             "وزارة",
             "هيئة",
-            "مصلحة"
+            "مصلحة",
+            "وزارة حكومية",
+            "جهة رسمية",
+            "جهاز حكومي",
+            "هيئة عامة"
           ],
           "keywords_en": [
             "ministry",
             "ministries",
-            "authority"
+            "authority",
+            "government authority",
+            "public authority",
+            "government department"
           ]
         },
         {
@@ -394,12 +583,18 @@
           "keywords_ar": [
             "محافظة",
             "مدينة",
-            "حي"
+            "حي",
+            "محافظة مصرية",
+            "مجلس محلي",
+            "إدارة محلية",
+            "مركز ومدينة"
           ],
           "keywords_en": [
             "governorate",
             "city",
-            "municipality"
+            "municipality",
+            "local government",
+            "district council"
           ]
         }
       ],
@@ -409,7 +604,12 @@
         "governorate",
         "public service",
         "official",
-        "municipality"
+        "municipality",
+        "government portal",
+        "public administration",
+        "government agency",
+        "citizen services",
+        "e-government"
       ]
     },
     {
@@ -421,19 +621,34 @@
         "صحافة",
         "خبر",
         "جريدة",
-        "سياسة"
+        "سياسة",
+        "تغطية إخبارية",
+        "أخبار عاجلة",
+        "نشرة الأخبار",
+        "مراسل صحفي",
+        "تحقيق صحفي",
+        "مقال رأي",
+        "صحيفة إلكترونية",
+        "وكالة أنباء"
       ],
       "subcategories": [
         {
           "id": "local_news",
           "name_ar": "أخبار محلية",
           "keywords_ar": [
-            "مصر",
             "محلي",
-            "محافظة"
+            "محافظة",
+            "أخبار مصر",
+            "الأخبار المحلية",
+            "محليات",
+            "محافظات مصر",
+            "مراسلون محليون"
           ],
           "keywords_en": [
-            "local news"
+            "local news",
+            "Egypt news",
+            "regional news",
+            "local reporting"
           ]
         },
         {
@@ -442,11 +657,18 @@
           "keywords_ar": [
             "اقتصاد",
             "بورصة",
-            "أعمال"
+            "أعمال",
+            "أسواق المال",
+            "أسعار الأسهم",
+            "مؤشرات البورصة",
+            "تقارير اقتصادية"
           ],
           "keywords_en": [
             "business news",
-            "economic news"
+            "economic news",
+            "financial markets",
+            "stock market news",
+            "market report"
           ]
         },
         {
@@ -455,10 +677,17 @@
           "keywords_ar": [
             "رياضة",
             "كرة",
-            "مباريات"
+            "مباريات",
+            "أخبار كرة القدم",
+            "نتائج المباريات",
+            "الدوري المصري",
+            "أخبار الأندية"
           ],
           "keywords_en": [
-            "sports news"
+            "sports news",
+            "football news",
+            "match results",
+            "league table"
           ]
         }
       ],
@@ -468,7 +697,14 @@
         "newspaper",
         "press",
         "politics",
-        "breaking"
+        "breaking",
+        "news coverage",
+        "breaking news",
+        "news bulletin",
+        "news report",
+        "news agency",
+        "online newspaper",
+        "editorial"
       ]
     },
     {
@@ -480,7 +716,17 @@
         "أعمال",
         "تجارة",
         "مؤسسة",
-        "خدمات تجارية"
+        "خدمات تجارية",
+        "استثمار",
+        "استثمارات",
+        "مستثمر",
+        "مستثمرون",
+        "فرص استثمارية",
+        "تأسيس الشركات",
+        "رأس المال",
+        "قطاع خاص",
+        "بيئة الأعمال",
+        "مشروعات تجارية"
       ],
       "subcategories": [
         {
@@ -489,11 +735,18 @@
           "keywords_ar": [
             "برمجة",
             "تكنولوجيا",
-            "سوفت وير"
+            "سوفت وير",
+            "شركة برمجيات",
+            "شركة تقنية",
+            "حلول تقنية",
+            "خدمات تقنية"
           ],
           "keywords_en": [
             "technology company",
-            "software company"
+            "software company",
+            "IT company",
+            "technology services",
+            "tech firm"
           ]
         },
         {
@@ -503,12 +756,19 @@
             "متجر",
             "شراء",
             "بيع",
-            "تسوق"
+            "تسوق",
+            "تجارة إلكترونية",
+            "متجر إلكتروني",
+            "شراء عبر الإنترنت",
+            "منتجات للبيع"
           ],
           "keywords_en": [
             "commerce",
             "online store",
-            "shopping"
+            "shopping",
+            "e-commerce",
+            "online shopping",
+            "retail store"
           ]
         },
         {
@@ -516,12 +776,44 @@
           "name_ar": "شركات ناشئة",
           "keywords_ar": [
             "شركة ناشئة",
-            "ريادة أعمال"
+            "ريادة أعمال",
+            "مشروع ناشئ",
+            "حاضنة أعمال",
+            "تمويل الشركات الناشئة"
           ],
           "keywords_en": [
             "startup",
             "startups",
-            "entrepreneurship"
+            "entrepreneurship",
+            "startup funding",
+            "business incubator",
+            "venture capital"
+          ]
+        },
+        {
+          "id": "investment",
+          "name_ar": "استثمار وتنمية اقتصادية",
+          "keywords_ar": [
+            "استثمار",
+            "استثمارات",
+            "مستثمر",
+            "مستثمرون",
+            "فرص استثمارية",
+            "تأسيس الشركات",
+            "حوافز الاستثمار",
+            "مناطق حرة",
+            "ترويج الاستثمار"
+          ],
+          "keywords_en": [
+            "investment",
+            "investments",
+            "investor",
+            "investors",
+            "investment opportunities",
+            "company formation",
+            "investment incentives",
+            "free zones",
+            "investment promotion"
           ]
         }
       ],
@@ -534,7 +826,16 @@
         "startup",
         "enterprise",
         "shop",
-        "store"
+        "store",
+        "investment",
+        "investments",
+        "investor",
+        "investors",
+        "investment opportunity",
+        "company formation",
+        "capital",
+        "private sector",
+        "business environment"
       ]
     },
     {
@@ -546,7 +847,14 @@
         "عمل",
         "توظيف",
         "وظيفة",
-        "سيرة ذاتية"
+        "سيرة ذاتية",
+        "سوق العمل",
+        "باحث عن عمل",
+        "طلب توظيف",
+        "إعلان توظيف",
+        "تعيينات",
+        "فرصة وظيفية",
+        "مقابلة عمل"
       ],
       "subcategories": [
         {
@@ -554,12 +862,19 @@
           "name_ar": "إعلانات وظائف",
           "keywords_ar": [
             "وظائف شاغرة",
-            "فرص عمل"
+            "فرص عمل",
+            "وظيفة شاغرة",
+            "إعلان عن وظيفة",
+            "التقديم للوظائف",
+            "وظائف حكومية"
           ],
           "keywords_en": [
             "job listings",
             "job vacancies",
-            "job openings"
+            "job openings",
+            "job advertisement",
+            "open position",
+            "recruitment notice"
           ]
         },
         {
@@ -567,11 +882,16 @@
           "name_ar": "خدمات مهنية",
           "keywords_ar": [
             "تدريب مهني",
-            "تطوير مهني"
+            "تطوير مهني",
+            "إرشاد مهني",
+            "تأهيل مهني",
+            "استشارات مهنية"
           ],
           "keywords_en": [
             "career development",
-            "professional training"
+            "professional training",
+            "career counseling",
+            "vocational training"
           ]
         }
       ],
@@ -583,7 +903,14 @@
         "employment",
         "hiring",
         "vacancy",
-        "resume"
+        "resume",
+        "job search",
+        "job seeker",
+        "recruitment",
+        "career opportunity",
+        "employment opportunity",
+        "job application",
+        "workplace"
       ]
     },
     {
@@ -595,7 +922,16 @@
         "تكنولوجيا",
         "برمجة",
         "إنترنت",
-        "ذكاء اصطناعي"
+        "ذكاء اصطناعي",
+        "تحول رقمي",
+        "أمن سيبراني",
+        "أمن معلومات",
+        "حوسبة سحابية",
+        "بيانات ضخمة",
+        "شبكات الحاسوب",
+        "تطبيقات الهاتف",
+        "منصة رقمية",
+        "تطوير البرمجيات"
       ],
       "subcategories": [
         {
@@ -604,12 +940,19 @@
           "keywords_ar": [
             "برنامج",
             "تطبيق",
-            "منصة"
+            "منصة",
+            "تطبيق إلكتروني",
+            "برنامج حاسوبي",
+            "نظام برمجي",
+            "تطبيق جوال"
           ],
           "keywords_en": [
             "software",
             "apps",
-            "applications"
+            "applications",
+            "mobile application",
+            "web application",
+            "software platform"
           ]
         },
         {
@@ -618,12 +961,19 @@
           "keywords_ar": [
             "كود",
             "تطوير ويب",
-            "لغة برمجة"
+            "لغة برمجة",
+            "هندسة البرمجيات",
+            "تطوير التطبيقات",
+            "مطور ويب",
+            "لغات البرمجة"
           ],
           "keywords_en": [
             "programming",
             "web development",
-            "coding"
+            "coding",
+            "software engineering",
+            "application development",
+            "web developer"
           ]
         }
       ],
@@ -636,7 +986,16 @@
         "artificial intelligence",
         "app",
         "application",
-        "web development"
+        "web development",
+        "digital transformation",
+        "cybersecurity",
+        "information security",
+        "cloud computing",
+        "big data",
+        "computer networks",
+        "mobile app",
+        "digital platform",
+        "software development"
       ]
     },
     {
@@ -649,7 +1008,16 @@
         "موسيقى",
         "مسرح",
         "سينما",
-        "تراث"
+        "تراث",
+        "معرض فني",
+        "فنون تشكيلية",
+        "فنون بصرية",
+        "مهرجان ثقافي",
+        "أدب",
+        "شعر",
+        "مخطوطات",
+        "متحف",
+        "آثار مصرية"
       ],
       "subcategories": [
         {
@@ -658,12 +1026,19 @@
           "keywords_ar": [
             "فن",
             "رسم",
-            "موسيقى"
+            "موسيقى",
+            "فنان",
+            "لوحات فنية",
+            "معارض الفن",
+            "فن تشكيلي"
           ],
           "keywords_en": [
             "arts",
             "painting",
-            "music"
+            "music",
+            "visual artist",
+            "art gallery",
+            "fine arts"
           ]
         },
         {
@@ -672,12 +1047,19 @@
           "keywords_ar": [
             "تراث",
             "آثار",
-            "تاريخ"
+            "تاريخ",
+            "آثار تاريخية",
+            "موقع أثري",
+            "حضارة مصر القديمة",
+            "ترميم الآثار"
           ],
           "keywords_en": [
             "heritage",
             "archaeology",
-            "history"
+            "history",
+            "historic site",
+            "ancient civilization",
+            "conservation"
           ]
         }
       ],
@@ -689,7 +1071,15 @@
         "theater",
         "cinema",
         "heritage",
-        "history"
+        "history",
+        "art exhibition",
+        "visual arts",
+        "cultural festival",
+        "literature",
+        "poetry",
+        "manuscript",
+        "museum",
+        "Egyptian antiquities"
       ]
     },
     {
@@ -701,7 +1091,14 @@
         "كرة القدم",
         "نادي",
         "بطولة",
-        "مباريات"
+        "مباريات",
+        "بطولة رياضية",
+        "دوري رياضي",
+        "نتيجة مباراة",
+        "لاعب كرة القدم",
+        "منتخب مصر",
+        "اتحاد رياضي",
+        "ألعاب أولمبية"
       ],
       "subcategories": [],
       "keywords_en": [
@@ -712,7 +1109,14 @@
         "club",
         "tournament",
         "match",
-        "league"
+        "league",
+        "athlete",
+        "athletics",
+        "sports competition",
+        "game score",
+        "football player",
+        "national team",
+        "Olympic games"
       ]
     },
     {
@@ -724,7 +1128,14 @@
         "سفر",
         "فنادق",
         "رحلات",
-        "أماكن سياحية"
+        "أماكن سياحية",
+        "سياحة داخلية",
+        "سياحة ثقافية",
+        "مقصد سياحي",
+        "معالم سياحية",
+        "مكاتب سفر",
+        "تأشيرة سفر",
+        "حجز رحلة"
       ],
       "subcategories": [],
       "keywords_en": [
@@ -735,7 +1146,14 @@
         "trip",
         "vacation",
         "tourist",
-        "destination"
+        "destination",
+        "tourist attraction",
+        "travel agency",
+        "travel visa",
+        "flight booking",
+        "cultural tourism",
+        "domestic tourism",
+        "travel guide"
       ]
     },
     {
@@ -747,7 +1165,13 @@
         "دليل",
         "مواعيد",
         "حجز",
-        "استعلام"
+        "استعلام",
+        "دليل خدمات",
+        "حجز موعد",
+        "طلب حجز",
+        "خدمات إلكترونية",
+        "مركز خدمة",
+        "الاستعلام عن خدمة"
       ],
       "subcategories": [],
       "keywords_en": [
@@ -757,7 +1181,12 @@
         "appointment",
         "booking",
         "reservation",
-        "guide"
+        "guide",
+        "service directory",
+        "appointment booking",
+        "online service",
+        "service center",
+        "service request"
       ]
     },
     {
@@ -769,7 +1198,14 @@
         "قناة",
         "يوتيوب",
         "إعلام",
-        "بودكاست"
+        "بودكاست",
+        "إنتاج إعلامي",
+        "بث مباشر",
+        "محطة إذاعية",
+        "برنامج تلفزيوني",
+        "محتوى مرئي",
+        "منصة بث",
+        "صناعة الأفلام"
       ],
       "subcategories": [],
       "keywords_en": [
@@ -778,7 +1214,13 @@
         "channel",
         "youtube",
         "podcast",
-        "broadcast"
+        "broadcast",
+        "live streaming",
+        "radio station",
+        "television programme",
+        "visual content",
+        "broadcasting platform",
+        "film production"
       ]
     },
     {

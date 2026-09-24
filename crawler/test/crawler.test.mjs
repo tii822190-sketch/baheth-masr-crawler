@@ -4,7 +4,7 @@ import { canonicalize } from '../src/db.mjs';
 import { extractHtml } from '../src/extract.mjs';
 import { extractLightHtml } from '../src/light-extract.mjs';
 import { classifyContent } from '../src/classify.mjs';
-import { diagnoseReview, errorCode, isComplete, shouldUseBrowserFallback } from '../src/crawl.mjs';
+import { buildSearchKeywords, diagnoseReview, errorCode, isComplete, shouldUseBrowserFallback } from '../src/crawl.mjs';
 import taxonomy from '../../taxonomy/search-taxonomy.json' with { type: 'json' };
 
 test('canonicalize removes tracking and normalizes host', () => { assert.equal(canonicalize('https://WWW.Example.com/index.html?utm_source=x&a=1#x'), 'https://example.com/?a=1'); });
@@ -21,6 +21,36 @@ test('light extraction keeps only index fields with a 250-character description 
 test('light extraction falls back from empty HTML descriptions', () => { const x=extractLightHtml('<title>مكتبة القرآن الصوتية</title><meta name="description" content="&lt;p&gt;&lt;br&gt;&lt;/p&gt;"><main><p>تصفح واستماع وتحميل سور القرآن الكريم.</p></main>','https://mp3quran.net/'); assert.match(x.summary,/تصفح واستماع وتحميل سور القرآن الكريم/); assert.equal(x.searchSnippet,x.summary); assert.doesNotMatch(x.description,/<[a-z]/i); assert.match(x.description,/تصفح واستماع وتحميل سور القرآن الكريم/); });
 test('classifies every taxonomy category without throwing', () => { for (const category of taxonomy.categories.filter((item) => item.id !== 'other')) { const keyword = category.keywords_ar?.[0] || category.name_ar; const result = classifyContent({ title: category.name_ar, description: `${keyword} ${category.name_en}`, summary: category.name_ar, extractedText: `${keyword} ${category.name_en}` }); assert.equal(result.categoryCandidate, category.id); assert.ok(result.classificationScore>0); } assert.equal(classifyContent({ title: '', description: '', summary: '', extractedText: '' }).categoryCandidate, 'other'); });
 test('prioritizes the official Quran radio domain over secondary government words', () => { const result = classifyContent({ sourceUrl: 'https://misrquran.gov.eg/episodeDetails/1', title: 'سعي سيدنا علي للحاق بالرسول | إذاعة القرآن الكريم', description: 'تناولت الحلقة الهجرة وحفاوة أهل المدينة بالرسول', summary: 'إذاعة القرآن الكريم', extractedText: 'إذاعة القرآن الكريم' }); assert.equal(result.categoryCandidate, 'quran'); });
+test('classifies investment pages with relevant Arabic and English keywords only', () => {
+  const result = classifyContent({ title: 'Electronic Incorporation Services', description: 'Launch your investments through a unified digital platform', summary: 'Investor services and investment incentives for companies in free zones', extractedText: 'Foreign investment supports investors and company formation in economic free zones.' });
+  assert.equal(result.categoryCandidate, 'business');
+  assert.ok(result.subcategoryCandidates.includes('investment'));
+  assert.ok(result.matchedKeywords.some((keyword) => /investment|investor|مستثمر|استثمار/i.test(keyword)));
+  assert.doesNotMatch(result.matchedKeywords.join(' '), /football|quran|كرة القدم|قرآن/i);
+});
+test('avoids substring false positives for short English taxonomy terms', () => {
+  const result = classifyContent({ title: 'Matching public-service records', description: 'A reference page for document matching services', summary: 'Matching information for public service applicants', extractedText: 'Matching process, available services and service directory.' });
+  assert.notEqual(result.categoryCandidate, 'sports');
+  assert.ok(!result.matchedKeywords.some((keyword) => keyword.toLowerCase() === 'match'));
+});
+test('Arabic definite-article forms match job keywords', () => {
+  const result = classifyContent({ title: 'الوظائف الشاغرة وفرص العمل', description: 'التقديم على الوظائف المتاحة', summary: 'بوابة توظيف الباحثين عن عمل', extractedText: 'وظائف وفرص عمل وإعلانات توظيف محدثة.' });
+  assert.equal(result.categoryCandidate, 'jobs');
+  assert.ok(result.matchedKeywords.length > 0);
+});
+test('uses metadata keywords only when they are confirmed by page text', () => {
+  const extracted = extractHtml('<title>Investment portal</title><meta name="description" content="Investment and investor support"><meta name="keywords" content="investment, investor, football, Quran"><main><p>Investment services are available to investors.</p></main>', 'https://gafi.gov.eg/en/');
+  assert.ok(extracted.matchedKeywords.includes('investment'));
+  assert.ok(extracted.matchedKeywords.includes('investor'));
+  assert.ok(!extracted.matchedKeywords.includes('football'));
+  assert.ok(!extracted.matchedKeywords.includes('Quran'));
+});
+test('index keywords contain matched terms and labels, not the whole category dictionary', () => {
+  const keywords = buildSearchKeywords({ categoryCandidate: 'business', subcategoryCandidates: ['investment'], matchedKeywords: ['investment', 'foreign investors'] });
+  assert.match(keywords, /استثمار وتنمية اقتصادية/);
+  assert.match(keywords, /foreign investors/);
+  assert.doesNotMatch(keywords, /كرة القدم|القرآن|sports|quran/i);
+});
 test('quarantine classifies HTTP error responses', () => {
   for (const [status, expected] of [[404, 'not_found'], [403, 'forbidden'], [429, 'rate_limited'], [500, 'http_500']]) {
     assert.equal(errorCode({}, { httpStatus: status, contentType: 'text/html', meta: { qualityStatus: 'good' } }), expected);

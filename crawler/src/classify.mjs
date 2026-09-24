@@ -17,7 +17,17 @@ function normalize(value = '') {
 function countMatches(text, keyword) {
   const term = normalize(keyword);
   if (!term || term.length < 2) return 0;
-  return text.split(term).length - 1;
+  const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const variants = new Set([escaped]);
+  if (/^[\u0600-\u06FF\s]+$/.test(term)) {
+    for (const prefix of ['ال', 'وال', 'بال', 'لل', 'فال', 'كال']) variants.add(`${prefix}${escaped}`);
+  }
+  let matches = 0;
+  for (const variant of variants) {
+    const matcher = new RegExp(`(^|[^\\p{L}\\p{N}])${variant}(?=$|[^\\p{L}\\p{N}])`, 'gu');
+    matches += [...text.matchAll(matcher)].length;
+  }
+  return matches;
 }
 
 function scoreEntry(text, title, description, entry) {
@@ -26,7 +36,8 @@ function scoreEntry(text, title, description, entry) {
   for (const keyword of [...(entry.keywords_ar || []), ...(entry.keywords_en || [])]) {
     const titleHits = countMatches(title, keyword);
     const descriptionHits = countMatches(description, keyword);
-    const textHits = countMatches(text, keyword);
+    // Repeated boilerplate must not outweigh topic-specific title/description evidence.
+    const textHits = Math.min(2, countMatches(text, keyword));
     const points = titleHits * 5 + descriptionHits * 3 + textHits;
     if (points) reasons.push({ keyword, titleHits, descriptionHits, textHits, points });
     score += points;
@@ -34,7 +45,7 @@ function scoreEntry(text, title, description, entry) {
   return { score, reasons };
 }
 
-export function classifyContent({ title = '', description = '', summary = '', extractedText = '', sourceUrl = '' } = {}) {
+export function classifyContent({ title = '', description = '', summary = '', extractedText = '', sourceUrl = '', metaKeywords = [] } = {}) {
   const normalizedTitle = normalize(title);
   const normalizedDescription = normalize(description);
   const normalizedText = normalize(`${summary} ${extractedText}`);
@@ -78,6 +89,21 @@ export function classifyContent({ title = '', description = '', summary = '', ex
   const best = candidates[0];
   const secondScore = candidates[1]?.score || 0;
   const confidence = best ? Number(Math.min(0.99, Math.max(0.05, (best.score - secondScore + Math.min(best.score, 10)) / 20)).toFixed(3)) : 0;
+  const matchedKeywords = best ? [
+    ...best.reasons,
+    ...best.subcategories.flatMap((item) => item.reasons || []),
+  ].sort((a, b) => b.points - a.points || a.keyword.localeCompare(b.keyword))
+    .map((item) => item.keyword)
+    .filter((keyword, index, all) => all.indexOf(keyword) === index)
+    .slice(0, 12) : [];
+  const visibleEvidence = `${normalizedTitle} ${normalizedDescription} ${normalizedText}`;
+  const metadataTerms = (Array.isArray(metaKeywords) ? metaKeywords : String(metaKeywords).split(/[,;|]/))
+    .map((keyword) => String(keyword).trim())
+    .filter((keyword) => normalize(keyword).length >= 3 && countMatches(visibleEvidence, keyword) > 0);
+  for (const keyword of metadataTerms) {
+    if (!matchedKeywords.some((existing) => normalize(existing) === normalize(keyword))) matchedKeywords.push(keyword);
+    if (matchedKeywords.length >= 16) break;
+  }
   return {
     categoryCandidate: best?.category || taxonomy.default_category,
     subcategoryCandidates: best?.subcategories.map((item) => item.id) || [],
@@ -85,6 +111,7 @@ export function classifyContent({ title = '', description = '', summary = '', ex
     classificationConfidence: confidence,
     classificationStatus: 'candidate',
     classificationReasons: best?.reasons || [],
+    matchedKeywords,
     classificationCandidates: candidates.slice(0, 5).map(({ category, score, subcategories }) => ({ category, score, subcategories: subcategories.map((item) => item.id) })),
   };
 }
