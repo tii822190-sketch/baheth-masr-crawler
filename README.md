@@ -19,7 +19,7 @@
 | الجدول | الغرض | أهم البيانات |
 | --- | --- | --- |
 | `sites` | سجل المواقع ونقطة استكمال اكتشافها | الرابط، حالة الاكتشاف، و`discovery_cursor` |
-| `site_pages` | طابور الصفحات المكتشفة | الموقع، الرابط، حالة الزحف، وعدد المحاولات |
+| `site_pages` | طابور الصفحات المكتشفة | الموقع، الرابط، حالة الزحف، عدد المحاولات، و`review_details` عند الحاجة للمراجعة |
 | `index_results` | النتائج الجاهزة للنشر في محرك البحث | الرابط، العنوان، الوصف، الأيقونة، الكلمات المفتاحية، والمقتطف |
 
 الجداول الثلاثة تُنشأ أو تُحدّث بواسطة `crawler/src/db.mjs` عند تشغيل CLI. يتحقق التهيئة من سلامة SQLite، ويعيد بناء الجداول القديمة عند الحاجة حتى تقبل حالات المواقع الحالية. توجد فهارس على حالة طابور الصفحات، والموقع، ورابط نتيجة الفهرسة.
@@ -43,9 +43,11 @@
 
 الأمر الأساسي هو `node crawler/src/cli.mjs manual`. قبل كل دفعة يعيد الصفحات التي توقفت بحالة `processing` إلى `pending`. ثم يختار الصفحات `pending` أو `queued`، وإذا لم توجد ينتقل إلى الصفحات `needs_review` التي لم تتجاوز حد المحاولات.
 
-لا تُحفظ الصفحة في `index_results` إلا إذا كانت استجابتها HTML ونجح استخراج جميع الحقول المطلوبة: `url` و`title` و`description` و`icon_url` و`keywords` و`snippet`. تُطبع البيانات وتُصنّف وفق `taxonomy/search-taxonomy.json`، وتُعامل النتائج الصحية والدينية وغيرها كمرشحات تصنيفية لا كموافقة تحريرية تلقائية.
+في الوضع `hybrid` يحلل الزاحف استجابة HTTP قبل تقرير كفايتها. إذا بدا HTML هيكلًا لتطبيق JavaScript بلا نص مستخرج كافٍ، أو صُنّف المحتوى `dynamic_content` أو `thin_content`، أو كانت الاستجابة غير HTML/خطأ HTTP، يعيد جلبها عبر Chromium headless. يقارن النص المستخرج من النسختين ويحتفظ بنسخة المتصفح إذا أعادت محتوى أكثر؛ وإلا يبقي استجابة HTTP مع حفظ نتيجة محاولة المتصفح.
 
-الصفحة الفاشلة تنتقل أولًا إلى `needs_review`. وبعد إعادة المحاولة المحددة تنتقل إلى `corrupt` وتُحذف من الطابور. أما حالات HTTP الشائعة، مثل 404 و403 و429، والمهل المنتهية، والاستجابات غير HTML، والمحتوى الديناميكي أو القليل، فتُستخدم لتفسير سبب الفشل أثناء الفحص والتصنيف.
+لا تُحفظ الصفحة في `index_results` إلا إذا كانت استجابتها HTML، وكان تصنيف جودتها `good`، وتجاوز النص المستخرج الحد الأدنى، وتوفرت الحقول: `url` و`title` و`description` و`icon_url` و`keywords` و`snippet`. تُطبع البيانات وتُصنّف وفق `taxonomy/search-taxonomy.json`، وتُعامل النتائج الصحية والدينية وغيرها كمرشحات تصنيفية لا كموافقة تحريرية تلقائية.
+
+تنتقل الصفحة غير المكتملة أولًا إلى `needs_review` ثم تُتاح لإعادة المحاولة المحددة. يحفظ العمود `site_pages.review_details` سبب المراجعة، والحقول الناقصة، وحالة HTTP ونوع المحتوى وطريقة الجلب ومحاولة المتصفح؛ وتُجمع أسباب الإخفاق أيضًا في JSON الذي يخرجه كل تشغيل. وبعد استنفاد محاولات المراجعة تنتقل إلى `corrupt` مع الاحتفاظ بتشخيصها، لا أن يُمحى سبب الفشل.
 
 ## المزامنة اليومية مع Turso
 
@@ -97,7 +99,7 @@ CRAWLER_FETCH_MODE=hybrid \
 npm run crawl:manual
 ```
 
-أهم إعدادات الفهرسة هي `CRAWLER_BATCH_SIZE` و`CRAWLER_MAX_PAGES` و`CRAWLER_CONCURRENCY` و`CRAWLER_BROWSER_CONCURRENCY` و`CRAWLER_BROWSER_BUDGET_MS` و`CRAWLER_PAGE_TIMEOUT_MS` و`CRAWLER_RETRIES` و`CRAWLER_REVIEW_RETRIES` و`CRAWLER_FETCH_MODE`. الوضع `hybrid` هو الوضع الافتراضي، ويمكن تغييره إلى `http` أو `browser`.
+أهم إعدادات الفهرسة هي `CRAWLER_BATCH_SIZE` و`CRAWLER_MAX_PAGES` و`CRAWLER_CONCURRENCY` و`CRAWLER_BROWSER_CONCURRENCY` و`CRAWLER_BROWSER_BUDGET_MS` و`CRAWLER_PAGE_TIMEOUT_MS` و`CRAWLER_RETRIES` و`CRAWLER_REVIEW_RETRIES` و`CRAWLER_FETCH_MODE` و`CRAWLER_MIN_EXTRACTED_TEXT_CHARS` و`CRAWLER_BROWSER_BIN`. الوضع `hybrid` هو الوضع الافتراضي، ويمكن تغييره إلى `http` أو `browser`.
 
 أهم إعدادات الاكتشاف هي `DISCOVERY_SITE_URL` و`DISCOVERY_MAX_PAGES_PER_SITE` و`DISCOVERY_MAX_SITEMAPS` و`DISCOVERY_TIMEOUT_MS` و`DISCOVERY_RESUME_INCOMPLETE` و`DISCOVERY_BROWSER_BUDGET_MS` و`DISCOVERY_BROWSER_SCROLL_STEPS`.
 

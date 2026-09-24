@@ -4,7 +4,7 @@ import { canonicalize } from '../src/db.mjs';
 import { extractHtml } from '../src/extract.mjs';
 import { extractLightHtml } from '../src/light-extract.mjs';
 import { classifyContent } from '../src/classify.mjs';
-import { errorCode } from '../src/crawl.mjs';
+import { diagnoseReview, errorCode, isComplete, shouldUseBrowserFallback } from '../src/crawl.mjs';
 import taxonomy from '../../taxonomy/search-taxonomy.json' with { type: 'json' };
 
 test('canonicalize removes tracking and normalizes host', () => { assert.equal(canonicalize('https://WWW.Example.com/index.html?utm_source=x&a=1#x'), 'https://example.com/?a=1'); });
@@ -34,4 +34,33 @@ test('quarantine rejects non-HTML and low-quality content', () => {
   assert.equal(errorCode({}, { httpStatus: 200, contentType: 'application/json', meta: { qualityStatus: 'not_indexable_api' } }), 'not_html');
   assert.equal(errorCode({}, { httpStatus: 200, contentType: 'text/html', meta: { qualityStatus: 'dynamic_content' } }), 'dynamic_content');
   assert.equal(errorCode({}, { httpStatus: 200, contentType: 'text/html', meta: { qualityStatus: 'thin_content' } }), 'thin_content');
+});
+
+test('hybrid fetching escalates a JavaScript shell with no rendered text to Chromium', () => {
+  const result = { status: 200, contentType: 'text/html', body: `<html><head><title>مصر الرقمية</title><meta name="description" content="بوابة خدمات حكومية"><link rel="icon" href="/favicon.ico"></head><body><div id="__next"></div><script>${'window.app = true;'.repeat(20)}</script></body></html>` };
+  const meta = extractHtml(result.body, 'https://digital.gov.eg/categories', result.contentType);
+  assert.equal(meta.qualityStatus, 'dynamic_content');
+  assert.equal(meta.extractedText.trim(), '');
+  assert.equal(shouldUseBrowserFallback(result, meta), true);
+  assert.equal(isComplete(result, { url: 'https://digital.gov.eg/categories', title: meta.title, description: meta.description, iconUrl: meta.iconUrl, keywords: 'حكومة', snippet: meta.searchSnippet, qualityStatus: meta.qualityStatus, extractedTextLength: meta.extractedText.length }), false);
+});
+
+test('hybrid fetching keeps usable server-rendered HTML on the HTTP path', () => {
+  const body = `<html><head><title>خدمات وزارة حكومية</title><meta name="description" content="بوابة الخدمات الحكومية المتاحة إلكترونياً للمواطنين."><link rel="icon" href="/favicon.ico"></head><body><main><h1>الخدمات الحكومية</h1><p>${'يمكن للمواطن طلب الخدمات والاستعلام عنها إلكترونياً. '.repeat(10)}</p></main></body></html>`;
+  const result = { status: 200, contentType: 'text/html', body };
+  const extracted = extractHtml(body, 'https://example.gov.eg/', result.contentType);
+  const meta = { url: 'https://example.gov.eg/', title: extracted.title, description: extracted.description, iconUrl: extracted.iconUrl, keywords: 'حكومة، خدمات', snippet: extracted.searchSnippet, qualityStatus: extracted.qualityStatus, extractedTextLength: extracted.extractedText.length };
+  assert.equal(extracted.qualityStatus, 'good');
+  assert.equal(shouldUseBrowserFallback(result, extracted), false);
+  assert.equal(isComplete(result, meta), true);
+});
+
+test('review diagnostics retain actionable reason and missing required fields', () => {
+  const result = { status: 200, contentType: 'text/html', method: 'http' };
+  const diagnosis = diagnoseReview(result, { title: 'عنوان', qualityStatus: 'dynamic_content', extractedTextLength: 0 });
+  assert.equal(diagnosis.reason, 'dynamic_content');
+  assert.deepEqual(diagnosis.missingFields, ['url', 'description', 'iconUrl', 'keywords', 'snippet']);
+  assert.equal(diagnosis.httpStatus, 200);
+  assert.equal(diagnosis.fetchMethod, 'http');
+  assert.equal(diagnoseReview({ status: 403, contentType: 'text/html', method: 'http' }, {}).reason, 'http_403');
 });
