@@ -89,4 +89,5 @@ jobs:
           path: |
             db/crawler.sqlite
             /tmp/primary-crawler-result.json
+            /tmp/primary-crawler-result.jsonl
           retention-days: 7

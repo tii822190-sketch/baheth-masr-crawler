@@ -252,24 +252,29 @@ function markCorrupt(page) {
   removeFromQueue(page.id);
 }
 
+function emitPageProgress(event) {
+  const line = JSON.stringify({ type: 'crawler_page', ...event });
+  process.stderr.write(`[crawler] ${line}\n`);
+  const logPath = process.env.CRAWLER_PROGRESS_LOG_PATH;
+  if (logPath) fs.appendFileSync(logPath, `${line}\n`);
+}
+
 export async function run(type = 'manual') {
   const browserState = { active: 0, limit: browserConcurrency, waiters: [] };
   const { targets, phase } = acquireBatch();
   let success = 0; let review = 0; let corrupt = 0;
   const failureReasons = {};
-  const pages = [];
-  const fetched = await mapLimit(targets, (page) => fetchOne(page.url, browserState), concurrency);
-  for (let i = 0; i < targets.length; i += 1) {
-    const page = targets[i];
-    const result = fetched[i];
+  await mapLimit(targets, async (page) => {
+    const result = await fetchOne(page.url, browserState);
     result.pageAttempt = (page.crawl_attempts || 0) + 1;
     let meta = null;
     try { meta = compactMeta(result); } catch { meta = null; }
+    let pageEvent;
     if (meta && isComplete(result, meta)) {
       saveSuccessful(meta);
       removeFromQueue(page.id);
       success += 1;
-      pages.push({
+      pageEvent = {
         url: page.url,
         outcome: 'indexed',
         request: fetchTrace(result),
@@ -281,20 +286,21 @@ export async function run(type = 'manual') {
           keywords: meta.keywords,
           snippet: meta.snippet,
         },
-      });
+      };
     } else {
       const diagnosis = diagnoseReview(result, meta || {});
       failureReasons[diagnosis.reason] = (failureReasons[diagnosis.reason] || 0) + 1;
       if (phase === 'review' || (page.crawl_attempts || 0) >= retryLimit + 1) {
         markCorrupt(page);
         corrupt += 1;
-        pages.push({ url: page.url, outcome: 'corrupt', diagnostics: diagnosis });
+        pageEvent = { url: page.url, outcome: 'corrupt', diagnostics: diagnosis };
       } else {
         markNeedsReview(page);
         review += 1;
-        pages.push({ url: page.url, outcome: 'needs_review', diagnostics: diagnosis });
+        pageEvent = { url: page.url, outcome: 'needs_review', diagnostics: diagnosis };
       }
     }
-  }
-  return { phase, total: targets.length, success, needs_review: review, failure_reasons: failureReasons, corrupt, batch_size: batchSize, concurrency, browser_concurrency: browserConcurrency, retries, fetch_mode: fetchMode, pages };
+    emitPageProgress(pageEvent);
+  }, concurrency);
+  return { phase, total: targets.length, success, needs_review: review, failure_reasons: failureReasons, corrupt, batch_size: batchSize, concurrency, browser_concurrency: browserConcurrency, retries, fetch_mode: fetchMode };
 }
