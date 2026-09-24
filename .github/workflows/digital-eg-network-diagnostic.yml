@@ -1,0 +1,30 @@
+name: Digital Egypt Network Diagnostic
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check DNS, HTTPS, and Chromium for target and control
+        env:
+          DIAGNOSTIC_OUTPUT_PATH: /tmp/digital-eg-connectivity-diagnostic.json
+          DIAGNOSTIC_TIMEOUT_MS: '15000'
+          DIAGNOSTIC_BROWSER_TIMEOUT_MS: '30000'
+        run: node tools/diagnose-digital-eg-connectivity.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: digital-eg-network-diagnostic-${{ github.run_id }}
+          path: /tmp/digital-eg-connectivity-diagnostic.json
+          retention-days: 7
+          if-no-files-found: warn
