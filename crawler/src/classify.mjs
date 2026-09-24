@@ -58,24 +58,6 @@ export function classifyContent({ title = '', description = '', summary = '', ex
     });
   }
 
-  let sourceHost = '';
-  try { sourceHost = new URL(sourceUrl).hostname.toLowerCase().replace(/^www\./, ''); } catch {}
-  if (sourceHost === 'gov.eg' || sourceHost.endsWith('.gov.eg')) {
-    const government = candidates.find((candidate) => candidate.category === 'government');
-    const points = 40;
-    if (government) {
-      government.score += points;
-      government.reasons.push({ keyword: 'egyptian_gov_domain', titleHits: 0, descriptionHits: 0, textHits: 1, points });
-    } else {
-      candidates.push({
-        category: 'government',
-        score: points,
-        reasons: [{ keyword: 'egyptian_gov_domain', titleHits: 0, descriptionHits: 0, textHits: 1, points }],
-        subcategories: [],
-      });
-    }
-  }
-
   const quranSourceText = `${sourceHint} ${normalizedTitle} ${normalizedText}`;
   const isOfficialQuranDomain = /misrquran/.test(sourceHint);
   const isQuranSite = /quran com|quran ksu|mp3quran|misrquran|tanzil net|surahquran|quran navigator|holy quran|noble quran/.test(quranSourceText);
