@@ -31,9 +31,9 @@ jobs:
     env:
       CRAWLER_DB_PATH: db/crawler.sqlite
       DISCOVERY_SITE_URL: ${{ inputs.site_url || '' }}
-      DISCOVERY_MAX_PAGES_PER_SITE: '5000'
-      DISCOVERY_MAX_SITEMAPS: '2000'
-      DISCOVERY_TIMEOUT_MS: '20000'
+      DISCOVERY_MAX_PAGES_PER_SITE: ${{ github.ref_name == 'main' && '5000' || '500' }}
+      DISCOVERY_MAX_SITEMAPS: ${{ github.ref_name == 'main' && '2000' || '100' }}
+      DISCOVERY_TIMEOUT_MS: ${{ github.ref_name == 'main' && '20000' || '10000' }}
       DISCOVERY_RESUME_INCOMPLETE: ${{ inputs.resume_incomplete || false }}
       DISCOVERY_BROWSER_BUDGET_MS: '30000'
       DISCOVERY_BROWSER_SCROLL_STEPS: '6'
@@ -65,6 +65,7 @@ jobs:
       - name: Save local crawler database
         run: |
           set -euo pipefail
+          target_ref="${GITHUB_REF_NAME:-main}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           for attempt in 1 2 3; do
@@ -74,8 +75,8 @@ jobs:
               exit 0
             fi
             git commit -m "Run discovery spider and update local database"
-            if git push origin HEAD:main; then
-              echo "Discovery database pushed successfully on attempt ${attempt}."
+            if git push origin "HEAD:${target_ref}"; then
+              echo "Discovery database pushed successfully to ${target_ref} on attempt ${attempt}."
               exit 0
             fi
             if [ "$attempt" -eq 3 ]; then
@@ -83,8 +84,8 @@ jobs:
               exit 1
             fi
             echo "Remote changed during push; refreshing and repeating discovery (attempt $((attempt + 1)))."
-            git fetch origin main
-            git reset --hard origin/main
+            git fetch origin "${target_ref}"
+            git reset --hard "origin/${target_ref}"
             node crawler/src/cli.mjs init
             node tools/discovery-spider.mjs
           done
