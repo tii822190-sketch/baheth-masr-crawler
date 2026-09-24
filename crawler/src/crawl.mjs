@@ -104,19 +104,61 @@ export function shouldUseBrowserFallback(result, meta) {
     || extractedTextLength < minExtractedTextChars;
 }
 
-async function fetchOne(url, browserState) {
+export async function fetchOne(url, browserState, { httpFetcher = httpFetch, browserFetcher = browserFetch } = {}) {
   let lastError = '';
   let fetchAttempts = 0;
   for (let attempt = 0; attempt <= retries; attempt += 1) {
     fetchAttempts = attempt + 1;
     try {
-      if (fetchMode === 'browser') return { ...(await browserFetch(url, browserState)), fetchAttempts };
-      const http = { ...(await httpFetch(url)), fetchAttempts };
+      if (fetchMode === 'browser') return { ...(await browserFetcher(url, browserState)), fetchAttempts };
+      const httpStarted = Date.now();
+      let http;
+      try {
+        http = { ...(await httpFetcher(url)), fetchAttempts };
+      } catch (httpError) {
+        if (fetchMode !== 'hybrid') throw httpError;
+        const httpFetchError = String(httpError).slice(0, 500);
+        const httpFetchErrorCode = httpError?.name === 'AbortError' || /timeout/i.test(httpFetchError) ? 'timeout' : 'fetch_error';
+        try {
+          const browser = await browserFetcher(url, browserState);
+          return {
+            ...browser,
+            fetchAttempts,
+            browserFallbackAttempted: true,
+            browserFallbackChoice: 'browser',
+            httpFetchError,
+            httpFetchErrorCode,
+            httpDurationMs: Date.now() - httpStarted,
+          };
+        } catch (browserError) {
+          const browserFallbackError = String(browserError).slice(0, 500);
+          lastError = `http_${httpFetchErrorCode}: ${httpFetchError}; browser_fallback_error: ${browserFallbackError}`;
+          if (attempt < retries) {
+            await sleep(Math.min(5000, 500 * (attempt + 1)));
+            continue;
+          }
+          return {
+            url,
+            responseUrl: '',
+            status: 0,
+            contentType: '',
+            body: '',
+            duration: Date.now() - httpStarted,
+            method: fetchMode,
+            fetchAttempts,
+            error: lastError,
+            browserFallbackAttempted: true,
+            browserFallbackError,
+            httpFetchError,
+            httpFetchErrorCode,
+          };
+        }
+      }
       if (fetchMode === 'hybrid') {
         const httpMeta = extractHtml(http.body, http.responseUrl || http.url, http.contentType || 'text/html');
         if (shouldUseBrowserFallback(http, httpMeta)) {
           try {
-            const browser = await browserFetch(url, browserState);
+            const browser = await browserFetcher(url, browserState);
             const browserMeta = extractHtml(browser.body, browser.responseUrl || browser.url, browser.contentType || 'text/html');
             const httpTextLength = String(httpMeta.extractedText || '').trim().length;
             const browserTextLength = String(browserMeta.extractedText || '').trim().length;
@@ -230,6 +272,8 @@ function fetchTrace(result) {
     ...(Number.isFinite(result.browserFallbackHttpTextLength) ? { browserFallbackHttpTextLength: Number(result.browserFallbackHttpTextLength) } : {}),
     ...(Number.isFinite(result.browserFallbackRenderedTextLength) ? { browserFallbackRenderedTextLength: Number(result.browserFallbackRenderedTextLength) } : {}),
     ...(result.browserFallbackError ? { browserFallbackError: result.browserFallbackError } : {}),
+    ...(result.httpFetchError ? { httpFetchError: result.httpFetchError } : {}),
+    ...(result.httpFetchErrorCode ? { httpFetchErrorCode: result.httpFetchErrorCode } : {}),
   };
 }
 function saveSuccessful(meta) {

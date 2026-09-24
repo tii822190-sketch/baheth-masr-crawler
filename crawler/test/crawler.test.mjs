@@ -4,7 +4,7 @@ import { canonicalize } from '../src/db.mjs';
 import { extractHtml } from '../src/extract.mjs';
 import { extractLightHtml } from '../src/light-extract.mjs';
 import { classifyContent } from '../src/classify.mjs';
-import { diagnoseReview, errorCode, isComplete, shouldUseBrowserFallback } from '../src/crawl.mjs';
+import { diagnoseReview, errorCode, fetchOne, isComplete, shouldUseBrowserFallback } from '../src/crawl.mjs';
 import taxonomy from '../../taxonomy/search-taxonomy.json' with { type: 'json' };
 
 test('canonicalize removes tracking and normalizes host', () => { assert.equal(canonicalize('https://WWW.Example.com/index.html?utm_source=x&a=1#x'), 'https://example.com/?a=1'); });
@@ -21,6 +21,13 @@ test('light extraction keeps only index fields with a 250-character description 
 test('light extraction falls back from empty HTML descriptions', () => { const x=extractLightHtml('<title>مكتبة القرآن الصوتية</title><meta name="description" content="&lt;p&gt;&lt;br&gt;&lt;/p&gt;"><main><p>تصفح واستماع وتحميل سور القرآن الكريم.</p></main>','https://mp3quran.net/'); assert.match(x.summary,/تصفح واستماع وتحميل سور القرآن الكريم/); assert.equal(x.searchSnippet,x.summary); assert.doesNotMatch(x.description,/<[a-z]/i); assert.match(x.description,/تصفح واستماع وتحميل سور القرآن الكريم/); });
 test('classifies every taxonomy category without throwing', () => { for (const category of taxonomy.categories.filter((item) => item.id !== 'other')) { const keyword = category.keywords_ar?.[0] || category.name_ar; const result = classifyContent({ title: category.name_ar, description: `${keyword} ${category.name_en}`, summary: category.name_ar, extractedText: `${keyword} ${category.name_en}` }); assert.equal(result.categoryCandidate, category.id); assert.ok(result.classificationScore>0); } assert.equal(classifyContent({ title: '', description: '', summary: '', extractedText: '' }).categoryCandidate, 'other'); });
 test('prioritizes the official Quran radio domain over secondary government words', () => { const result = classifyContent({ sourceUrl: 'https://misrquran.gov.eg/episodeDetails/1', title: 'سعي سيدنا علي للحاق بالرسول | إذاعة القرآن الكريم', description: 'تناولت الحلقة الهجرة وحفاوة أهل المدينة بالرسول', summary: 'إذاعة القرآن الكريم', extractedText: 'إذاعة القرآن الكريم' }); assert.equal(result.categoryCandidate, 'quran'); });
+test('prioritizes official Egyptian .gov.eg domains for government pages', () => {
+  const result = classifyContent({ sourceUrl: 'https://digital.gov.eg/categories/terms/service', title: 'مصر الرقمية - خدمة حكومية', description: 'إجراءات تقديم الخدمات الحكومية', summary: 'معلومات عن خدمة حكومية للمواطنين', extractedText: 'شرح تقديم طلب الخدمة إلكترونياً' });
+  assert.equal(result.categoryCandidate, 'government');
+  assert.ok(result.classificationReasons.some((item) => item.keyword === 'egyptian_gov_domain'));
+  const nonGovernment = classifyContent({ sourceUrl: 'https://example.eg/', title: 'موقع خدمات', description: 'خدمات للمواطنين', summary: '', extractedText: '' });
+  assert.ok(!nonGovernment.classificationReasons.some((item) => item.keyword === 'egyptian_gov_domain'));
+});
 test('quarantine classifies HTTP error responses', () => {
   for (const [status, expected] of [[404, 'not_found'], [403, 'forbidden'], [429, 'rate_limited'], [500, 'http_500']]) {
     assert.equal(errorCode({}, { httpStatus: status, contentType: 'text/html', meta: { qualityStatus: 'good' } }), expected);
@@ -53,6 +60,38 @@ test('hybrid fetching keeps usable server-rendered HTML on the HTTP path', () =>
   assert.equal(extracted.qualityStatus, 'good');
   assert.equal(shouldUseBrowserFallback(result, extracted), false);
   assert.equal(isComplete(result, meta), true);
+});
+
+test('hybrid fetching falls back to Chromium after an HTTP timeout', async () => {
+  const browserBody = '<html><head><title>خدمة حكومية</title></head><body><main><h1>خدمة حكومية</h1><p>محتوى الصفحة المعروض في المتصفح بعد تنفيذ التطبيق البرمجي.</p></main></body></html>';
+  const result = await fetchOne('https://example.gov.eg/service', { active: 0, limit: 1, waiters: [] }, {
+    httpFetcher: async () => { throw new Error('fetch timeout'); },
+    browserFetcher: async (url) => ({ url, responseUrl: url, status: 200, contentType: 'text/html', body: browserBody, duration: 1234, method: 'browser' }),
+  });
+  assert.equal(result.method, 'browser');
+  assert.equal(result.status, 200);
+  assert.equal(result.browserFallbackAttempted, true);
+  assert.equal(result.browserFallbackChoice, 'browser');
+  assert.match(result.httpFetchError, /fetch timeout/);
+  assert.equal(result.httpFetchErrorCode, 'timeout');
+  assert.equal(result.fetchAttempts, 1);
+});
+
+test('hybrid fetching reports HTTP timeout and browser fallback failure together', async () => {
+  const result = await fetchOne('https://example.gov.eg/service', { active: 0, limit: 1, waiters: [] }, {
+    httpFetcher: async () => { throw new Error('HTTP socket timeout'); },
+    browserFetcher: async () => { throw new Error('Chromium navigation timeout'); },
+  });
+  assert.equal(result.status, 0);
+  assert.equal(result.browserFallbackAttempted, true);
+  assert.match(result.error, /HTTP socket timeout/);
+  assert.match(result.error, /Chromium navigation timeout/);
+  const diagnosis = diagnoseReview(result, {});
+  assert.equal(diagnosis.browserFallbackAttempted, true);
+  assert.match(diagnosis.httpFetchError, /HTTP socket timeout/);
+  assert.equal(diagnosis.httpFetchErrorCode, 'timeout');
+  assert.match(diagnosis.browserFallbackError, /Chromium navigation timeout/);
+  assert.match(diagnosis.error, /HTTP socket timeout/);
 });
 
 test('review diagnostics retain actionable reason and missing required fields', () => {
