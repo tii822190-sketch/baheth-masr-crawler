@@ -5,6 +5,7 @@ const path = process.env.CRAWLER_INPUT_DB_PATH || process.env.CRAWLER_DB_PATH ||
 const pageSize = Math.max(100, Math.min(1000, Number(process.env.SUPABASE_PAGE_SIZE || 1000)));
 const queueMode = String(process.env.SUPABASE_QUEUE_MODE || 'full').toLowerCase();
 const queueLimit = Math.max(1, Number(process.env.SUPABASE_QUEUE_LIMIT || 5000));
+const sitesMode = String(process.env.SUPABASE_SITES_MODE || 'full').toLowerCase();
 const manifestPath = process.env.SUPABASE_QUEUE_MANIFEST_PATH || `${path}.queue-manifest.json`;
 if (!projectUrl || !serviceKey) throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required');
 process.env.CRAWLER_INPUT_DB_PATH = path;
@@ -43,7 +44,7 @@ async function readQueueBatch() {
   return { rows: rows.slice(0, queueLimit), source: 'batch' };
 }
 try {
-  const sites = await readAll('crawler_sites', 'id,url,category,crawl_status,discovery_cursor,created_at,updated_at');
+  const sites = sitesMode === 'none' ? [] : await readAll('crawler_sites', 'id,url,category,crawl_status,discovery_cursor,created_at,updated_at');
   const queueResult = await readQueueBatch();
   const results = await readAll('crawler_results', 'id,url,title,description,icon_url,keywords,snippet,created_at,updated_at');
   const reset = db.transaction(() => {

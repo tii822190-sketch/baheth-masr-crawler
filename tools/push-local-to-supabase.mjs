@@ -8,6 +8,7 @@ const replaceResults = /^(1|true|yes)$/i.test(process.env.SUPABASE_REPLACE_RESUL
 const syncQueueDeletes = /^(1|true|yes)$/i.test(process.env.SUPABASE_SYNC_QUEUE_DELETES || '');
 const queueMode = String(process.env.SUPABASE_QUEUE_MODE || 'full').toLowerCase();
 const manifestPath = process.env.SUPABASE_QUEUE_MANIFEST_PATH || `${path}.queue-manifest.json`;
+const sitesMode = String(process.env.SUPABASE_SITES_MODE || 'full').toLowerCase();
 if (!projectUrl || !serviceKey) throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required');
 const db = new Database(path, { readonly: true });
 const headers = { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' };
@@ -43,7 +44,7 @@ try {
   const sites = db.prepare("SELECT id,url,category,crawl_status,discovery_cursor,created_at,updated_at FROM sites").all().map((r) => ({ ...r, category: r.category || 'ديني', discovery_cursor: r.discovery_cursor ? JSON.parse(r.discovery_cursor) : null }));
   const queue = db.prepare('SELECT id,site_id,url,crawl_status,crawl_attempts FROM site_pages').all();
   const results = db.prepare('SELECT id,url,title,description,icon_url,keywords,snippet,created_at,updated_at FROM index_results').all();
-  await upload('crawler_sites', sites);
+  if (sitesMode !== 'none') await upload('crawler_sites', sites);
   if (queueMode !== 'none') await upload('crawler_queue', queue);
   let deletedQueue = 0;
   if (syncQueueDeletes && queueMode !== 'none') {
