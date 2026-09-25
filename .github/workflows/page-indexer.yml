@@ -6,12 +6,12 @@ on:
       batch_size:
         description: Pages per batch
         required: false
-        default: '2000'
+        default: '5000'
         type: string
       max_pages:
         description: Maximum pages per run
         required: false
-        default: '2000'
+        default: '5000'
         type: string
   schedule:
     # GitHub Actions default timezone (UTC): 02:00, 03:40, 05:20, 07:00, 08:40, 10:20, 12:00, 13:40, 15:20, and 17:00.
@@ -36,8 +36,8 @@ jobs:
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
       SUPABASE_SYNC_QUEUE_DELETES: 'true'
       CRAWLER_FETCH_MODE: http
-      CRAWLER_BATCH_SIZE: ${{ inputs.batch_size || '2000' }}
-      CRAWLER_MAX_PAGES: ${{ inputs.max_pages || '2000' }}
+      CRAWLER_BATCH_SIZE: ${{ inputs.batch_size || '5000' }}
+      CRAWLER_MAX_PAGES: ${{ inputs.max_pages || '5000' }}
       CRAWLER_CONCURRENCY: '25'
       CRAWLER_BROWSER_CONCURRENCY: '5'
       CRAWLER_BROWSER_BUDGET_MS: '10000'
