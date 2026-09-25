@@ -34,6 +34,8 @@ jobs:
       SUPABASE_URL: https://ysntytwkggxdapokglsc.supabase.co
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
       SUPABASE_SYNC_QUEUE_DELETES: 'true'
+      SUPABASE_QUEUE_MODE: batch
+      SUPABASE_QUEUE_LIMIT: ${{ inputs.batch_size || '5000' }}
       CRAWLER_FETCH_MODE: http
       CRAWLER_BATCH_SIZE: ${{ inputs.batch_size || '5000' }}
       CRAWLER_MAX_PAGES: ${{ inputs.max_pages || '5000' }}

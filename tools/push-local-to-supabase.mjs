@@ -1,10 +1,13 @@
 import Database from 'better-sqlite3';
+import fs from 'node:fs';
 const projectUrl = String(process.env.SUPABASE_URL || '').replace(/\/$/, '');
 const serviceKey = String(process.env.SUPABASE_SERVICE_ROLE_KEY || '');
 const path = process.env.CRAWLER_INPUT_DB_PATH || process.env.CRAWLER_DB_PATH || '/tmp/crawler.sqlite';
 const batchSize = Math.max(1, Math.min(1000, Number(process.env.SUPABASE_MIGRATION_BATCH_SIZE || 500)));
 const replaceResults = /^(1|true|yes)$/i.test(process.env.SUPABASE_REPLACE_RESULTS || '');
 const syncQueueDeletes = /^(1|true|yes)$/i.test(process.env.SUPABASE_SYNC_QUEUE_DELETES || '');
+const queueMode = String(process.env.SUPABASE_QUEUE_MODE || 'full').toLowerCase();
+const manifestPath = process.env.SUPABASE_QUEUE_MANIFEST_PATH || `${path}.queue-manifest.json`;
 if (!projectUrl || !serviceKey) throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required');
 const db = new Database(path, { readonly: true });
 const headers = { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' };
@@ -27,12 +30,28 @@ async function deleteQueueRows(keepIds) {
   }
   return stale.length;
 }
+async function deleteProcessedQueueRows(keepIds, pulledIds) {
+  const stale = pulledIds.filter((id) => !keepIds.has(id));
+  for (let i = 0; i < stale.length; i += 200) {
+    const ids = stale.slice(i, i + 200).join(',');
+    const response = await fetch(`${projectUrl}/rest/v1/crawler_queue?id=in.(${ids})`, { method: 'DELETE', headers });
+    if (!response.ok) throw new Error(`crawler_queue partial delete failed (${response.status}): ${(await response.text()).slice(0, 1000)}`);
+  }
+  return stale.length;
+}
 try {
   const sites = db.prepare("SELECT id,url,category,crawl_status,discovery_cursor,created_at,updated_at FROM sites").all().map((r) => ({ ...r, category: r.category || 'ديني', discovery_cursor: r.discovery_cursor ? JSON.parse(r.discovery_cursor) : null }));
   const queue = db.prepare('SELECT id,site_id,url,crawl_status,crawl_attempts FROM site_pages').all();
   const results = db.prepare('SELECT id,url,title,description,icon_url,keywords,snippet,created_at,updated_at FROM index_results').all();
-  await upload('crawler_sites', sites); await upload('crawler_queue', queue);
-  const deletedQueue = syncQueueDeletes ? await deleteQueueRows(new Set(queue.map((row) => row.id))) : 0;
+  await upload('crawler_sites', sites);
+  if (queueMode !== 'none') await upload('crawler_queue', queue);
+  let deletedQueue = 0;
+  if (syncQueueDeletes && queueMode !== 'none') {
+    if (queueMode === 'batch') {
+      const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+      deletedQueue = await deleteProcessedQueueRows(new Set(queue.map((row) => Number(row.id))), (manifest.ids || []).map(Number));
+    } else deletedQueue = await deleteQueueRows(new Set(queue.map((row) => row.id)));
+  }
   if (replaceResults) {
     const response = await fetch(`${projectUrl}/rest/v1/crawler_results?id=gte.0`, { method: 'DELETE', headers });
     if (!response.ok) throw new Error(`crawler_results cleanup failed (${response.status}): ${(await response.text()).slice(0, 1000)}`);
