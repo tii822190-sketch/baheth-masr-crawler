@@ -29,7 +29,7 @@ permissions:
 jobs:
   index:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 90
     env:
       CRAWLER_INPUT_DB_PATH: db/crawler.sqlite
       CRAWLER_FETCH_MODE: hybrid
@@ -39,6 +39,8 @@ jobs:
       CRAWLER_BROWSER_CONCURRENCY: '5'
       CRAWLER_BROWSER_BUDGET_MS: '10000'
       CRAWLER_PAGE_TIMEOUT_MS: '60000'
+      # Stop accepting new pages at 80 minutes, leaving time to verify and commit the partial batch.
+      CRAWLER_RUN_BUDGET_MS: '4800000'
       CRAWLER_RETRIES: '0'
       CRAWLER_REVIEW_RETRIES: '1'
     steps:
@@ -53,7 +55,7 @@ jobs:
       - run: npm ci
       - name: Initialize the local three-table database
         run: node crawler/src/cli.mjs init
-      - name: Run up to 2000 queued pages
+      - name: Run up to 2000 queued pages with graceful 80-minute budget
         run: bash tools/run-primary-crawler.sh
       - name: Verify local database
         run: node tools/verify-local-crawler-db.mjs

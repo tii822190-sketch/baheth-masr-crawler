@@ -11,6 +11,7 @@ const browserConcurrency = Math.max(1, Math.min(concurrency, Number(process.env.
 const retries = Math.max(0, Number(process.env.CRAWLER_RETRIES || 0));
 const pageTimeoutMs = Math.max(1000, Number(process.env.CRAWLER_PAGE_TIMEOUT_MS || 60000));
 const browserBudgetMs = Math.max(1000, Number(process.env.CRAWLER_BROWSER_BUDGET_MS || 10000));
+const runBudgetMs = Math.max(0, Number(process.env.CRAWLER_RUN_BUDGET_MS || 0));
 const fetchMode = process.env.CRAWLER_FETCH_MODE || 'hybrid';
 const retryLimit = Math.max(1, Number(process.env.CRAWLER_REVIEW_RETRIES || 1));
 const minExtractedTextChars = Math.max(20, Number(process.env.CRAWLER_MIN_EXTRACTED_TEXT_CHARS || 80));
@@ -280,9 +281,16 @@ export async function run(type = 'manual') {
   const browserState = { active: 0, limit: browserConcurrency, waiters: [] };
   const { targets, phase } = acquireBatch();
   const progress = createProgressReporter(targets.length);
+  const deadline = runBudgetMs > 0 ? Date.now() + runBudgetMs : Infinity;
+  let stoppedEarly = false;
   let success = 0; let review = 0; let corrupt = 0;
   const failureReasons = {};
   await mapLimit(targets, async (page) => {
+    if (Date.now() >= deadline) {
+      db.prepare("UPDATE site_pages SET crawl_status='pending' WHERE id=? AND crawl_status='processing'").run(page.id);
+      stoppedEarly = true;
+      return;
+    }
     const result = await fetchOne(page.url, browserState);
     result.pageAttempt = (page.crawl_attempts || 0) + 1;
     let meta = null;
@@ -321,5 +329,6 @@ export async function run(type = 'manual') {
     progress.record(pageEvent);
   }, concurrency);
   progress.flush();
-  return { phase, total: targets.length, success, needs_review: review, failure_reasons: failureReasons, corrupt, batch_size: batchSize, concurrency, browser_concurrency: browserConcurrency, retries, fetch_mode: fetchMode };
+  const processed = success + review + corrupt;
+  return { phase, total: processed, selected: targets.length, stopped_early: stoppedEarly, success, needs_review: review, failure_reasons: failureReasons, corrupt, batch_size: batchSize, concurrency, browser_concurrency: browserConcurrency, retries, fetch_mode: fetchMode, run_budget_ms: runBudgetMs };
 }

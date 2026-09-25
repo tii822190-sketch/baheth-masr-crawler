@@ -14,8 +14,9 @@ while [ "$processed_pages" -lt "${CRAWLER_MAX_PAGES:-1000}" ]; do
   echo "===== batch ${batch_number} =====" | tee -a /tmp/primary-crawler-result.json
   echo "$output" | tee -a /tmp/primary-crawler-result.json
   processed=$(node -e "const x=JSON.parse(process.argv[1]); console.log(Number(x.total)||0)" "$output")
+  stopped_early=$(node -e "const x=JSON.parse(process.argv[1]); console.log(x.stopped_early ? 'true' : 'false')" "$output")
   processed_pages=$((processed_pages + processed))
-  if [ "$processed" -eq 0 ]; then break; fi
+  if [ "$processed" -eq 0 ] || [ "$stopped_early" = 'true' ]; then break; fi
 done
 
 echo "processed_pages=${processed_pages}" | tee -a /tmp/primary-crawler-result.json
