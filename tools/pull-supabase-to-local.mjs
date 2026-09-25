@@ -19,13 +19,13 @@ async function readAll(table, columns) {
   }
 }
 try {
-  const sites = await readAll('crawler_sites', 'id,url,crawl_status,discovery_cursor,created_at,updated_at');
+  const sites = await readAll('crawler_sites', 'id,url,category,crawl_status,discovery_cursor,created_at,updated_at');
   const queue = await readAll('crawler_queue', 'id,site_id,url,crawl_status,crawl_attempts');
   const results = await readAll('crawler_results', 'id,url,title,description,icon_url,keywords,snippet,created_at,updated_at');
   const reset = db.transaction(() => {
     db.exec('DELETE FROM index_results; DELETE FROM site_pages; DELETE FROM sites;');
-    const site = db.prepare('INSERT INTO sites (id,url,crawl_status,discovery_cursor,created_at,updated_at) VALUES (?,?,?,?,?,?)');
-    for (const row of sites) site.run(row.id, row.url, row.crawl_status, row.discovery_cursor ? JSON.stringify(row.discovery_cursor) : null, row.created_at, row.updated_at);
+    const site = db.prepare("INSERT INTO sites (id,url,category,crawl_status,discovery_cursor,created_at,updated_at) VALUES (?,?,?,?,?,?,?)");
+    for (const row of sites) site.run(row.id, row.url, row.category || 'ديني', row.crawl_status, row.discovery_cursor ? JSON.stringify(row.discovery_cursor) : null, row.created_at, row.updated_at);
     const page = db.prepare('INSERT INTO site_pages (id,site_id,url,crawl_status,crawl_attempts) VALUES (?,?,?,?,?)');
     for (const row of queue) page.run(row.id, row.site_id, row.url, row.crawl_status, row.crawl_attempts);
     const result = db.prepare('INSERT INTO index_results (id,url,title,description,icon_url,keywords,snippet,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)');

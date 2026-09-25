@@ -18,6 +18,7 @@ function createCoreTables() {
     CREATE TABLE IF NOT EXISTS sites (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       url TEXT NOT NULL UNIQUE,
+      category TEXT NOT NULL DEFAULT 'ديني',
       crawl_status TEXT NOT NULL DEFAULT 'pending',
       discovery_cursor TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -46,6 +47,7 @@ function createCoreTables() {
     CREATE INDEX IF NOT EXISTS idx_index_results_url ON index_results(url);
   `);
   if (!columns('sites').includes('discovery_cursor')) db.exec('ALTER TABLE sites ADD COLUMN discovery_cursor TEXT');
+  if (!columns('sites').includes('category')) db.exec("ALTER TABLE sites ADD COLUMN category TEXT NOT NULL DEFAULT 'ديني'");
 }
 
 function ensureSiteStatusConstraint() {
@@ -65,12 +67,13 @@ function ensureSiteStatusConstraint() {
     db.exec(`CREATE TABLE sites (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       url TEXT NOT NULL UNIQUE,
+      category TEXT NOT NULL DEFAULT 'ديني',
       crawl_status TEXT NOT NULL DEFAULT 'pending' CHECK (crawl_status IN ('pending','not_pages','processing','completed','incomplete','failed','error')),
       discovery_cursor TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )`);
-    db.exec('INSERT INTO sites (id,url,crawl_status,discovery_cursor,created_at,updated_at) SELECT id,url,crawl_status,discovery_cursor,created_at,updated_at FROM sites_data_backup');
+    db.exec("INSERT INTO sites (id,url,category,crawl_status,discovery_cursor,created_at,updated_at) SELECT id,url,COALESCE(category,'ديني'),crawl_status,discovery_cursor,created_at,updated_at FROM sites_data_backup");
     db.exec('DROP TABLE sites_old_status_constraint');
     db.exec(`CREATE TABLE site_pages (
       id INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -28,7 +28,7 @@ async function deleteQueueRows(keepIds) {
   return stale.length;
 }
 try {
-  const sites = db.prepare('SELECT id,url,crawl_status,discovery_cursor,created_at,updated_at FROM sites').all().map((r) => ({ ...r, discovery_cursor: r.discovery_cursor ? JSON.parse(r.discovery_cursor) : null }));
+  const sites = db.prepare("SELECT id,url,category,crawl_status,discovery_cursor,created_at,updated_at FROM sites").all().map((r) => ({ ...r, category: r.category || 'ديني', discovery_cursor: r.discovery_cursor ? JSON.parse(r.discovery_cursor) : null }));
   const queue = db.prepare('SELECT id,site_id,url,crawl_status,crawl_attempts FROM site_pages').all();
   const results = db.prepare('SELECT id,url,title,description,icon_url,keywords,snippet,created_at,updated_at FROM index_results').all();
   await upload('crawler_sites', sites); await upload('crawler_queue', queue);
