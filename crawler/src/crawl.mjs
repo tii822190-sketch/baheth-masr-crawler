@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { spawn } from 'node:child_process';
 import { db, canonicalize } from './db.mjs';
 import { extractLightHtml } from './light-extract.mjs';
 import taxonomy from '../../taxonomy/search-taxonomy.json' with { type: 'json' };
@@ -6,14 +7,16 @@ import taxonomy from '../../taxonomy/search-taxonomy.json' with { type: 'json' }
 const batchSize = Math.max(1, Number(process.env.CRAWLER_BATCH_SIZE || 20));
 const maxPages = Math.max(1, Number(process.env.CRAWLER_MAX_PAGES || batchSize));
 const concurrency = Math.max(1, Math.min(30, Number(process.env.CRAWLER_CONCURRENCY || 25)));
-const browserConcurrency = 0;
+const browserConcurrency = Math.max(1, Math.min(concurrency, Number(process.env.CRAWLER_BROWSER_CONCURRENCY || 5)));
 const retries = Math.max(0, Number(process.env.CRAWLER_RETRIES || 0));
 const pageTimeoutMs = Math.max(1000, Number(process.env.CRAWLER_PAGE_TIMEOUT_MS || 20000));
+const browserBudgetMs = Math.max(1000, Number(process.env.CRAWLER_BROWSER_BUDGET_MS || 10000));
 const runBudgetMs = Math.max(0, Number(process.env.CRAWLER_RUN_BUDGET_MS || 0));
 const fetchMode = 'http';
 const retryLimit = Math.max(1, Number(process.env.CRAWLER_REVIEW_RETRIES || 1));
 const minExtractedTextChars = 1;
 const REQUIRED_METADATA_FIELDS = ['url', 'title', 'description', 'iconUrl', 'keywords', 'snippet'];
+const browserBinary = process.env.CRAWLER_BROWSER_BIN || ['/usr/bin/chromium', '/usr/bin/chromium-browser', '/usr/bin/google-chrome', '/usr/bin/google-chrome-stable'].find((candidate) => fs.existsSync(candidate)) || 'chromium';
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function acquireBatch() {
@@ -41,6 +44,43 @@ function acquireBatch() {
   return { targets: candidates, phase: pending.length ? 'pending' : 'review' };
 }
 
+function acquireBrowserSlot(state) {
+  if (state.active < state.limit) { state.active += 1; return Promise.resolve(); }
+  return new Promise((resolve) => state.waiters.push(resolve));
+}
+
+function releaseBrowserSlot(state) {
+  const next = state.waiters.shift();
+  if (next) next();
+  else state.active -= 1;
+}
+
+async function browserFetch(url, browserState) {
+  await acquireBrowserSlot(browserState);
+  try {
+    return await new Promise((resolve, reject) => {
+      const started = Date.now();
+      const child = spawn(browserBinary, [
+        '--headless=new', '--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage',
+        `--virtual-time-budget=${browserBudgetMs}`, '--run-all-compositor-stages-before-draw', '--dump-dom', url,
+      ], { stdio: ['ignore', 'pipe', 'pipe'] });
+      let body = '';
+      let error = '';
+      const timer = setTimeout(() => { child.kill('SIGKILL'); reject(new Error('browser_timeout')); }, pageTimeoutMs);
+      child.stdout.on('data', (chunk) => { body += chunk; });
+      child.stderr.on('data', (chunk) => { error += chunk; });
+      child.once('error', (spawnError) => { clearTimeout(timer); reject(spawnError); });
+      child.on('close', (code) => {
+        clearTimeout(timer);
+        if (code === 0 && body.trim()) resolve({ url, responseUrl: url, status: 200, contentType: 'text/html', body, duration: Date.now() - started, method: 'browser' });
+        else reject(new Error(error.trim().slice(-300) || `browser_exit_${code}`));
+      });
+    });
+  } finally {
+    releaseBrowserSlot(browserState);
+  }
+}
+
 async function httpFetch(url) {
   const started = Date.now();
   const controller = new AbortController();
@@ -59,12 +99,13 @@ export function shouldUseBrowserFallback(result, meta) {
   return Number(result?.status || 0) >= 400 || !contentType.includes('html') || !String(meta?.extractedText || '').trim();
 }
 
-async function fetchOne(url) {
+async function fetchOne(url, { useBrowser = false, browserState = null } = {}) {
   let lastError = '';
   let fetchAttempts = 0;
   for (let attempt = 0; attempt <= retries; attempt += 1) {
     fetchAttempts = attempt + 1;
     try {
+      if (useBrowser) return { ...(await browserFetch(url, browserState)), fetchAttempts };
       const http = { ...(await httpFetch(url)), fetchAttempts };
       return http;
     } catch (error) {
@@ -215,6 +256,7 @@ export function createProgressReporter(total, { writeProgress = (message) => pro
 
 export async function run(type = 'manual') {
   const { targets, phase } = acquireBatch();
+  const browserState = { active: 0, limit: browserConcurrency, waiters: [] };
   const progress = createProgressReporter(targets.length);
   const deadline = runBudgetMs > 0 ? Date.now() + runBudgetMs : Infinity;
   let stoppedEarly = false;
@@ -226,7 +268,7 @@ export async function run(type = 'manual') {
       stoppedEarly = true;
       return;
     }
-    const result = await fetchOne(page.url);
+    const result = await fetchOne(page.url, { useBrowser: phase === 'review', browserState });
     result.pageAttempt = (page.crawl_attempts || 0) + 1;
     let meta = null;
     try { meta = compactMeta(result); } catch { meta = null; }

@@ -39,7 +39,8 @@ jobs:
       CRAWLER_BATCH_SIZE: ${{ inputs.batch_size || '2000' }}
       CRAWLER_MAX_PAGES: ${{ inputs.max_pages || '2000' }}
       CRAWLER_CONCURRENCY: '25'
-      CRAWLER_BROWSER_CONCURRENCY: '0'
+      CRAWLER_BROWSER_CONCURRENCY: '5'
+      CRAWLER_BROWSER_BUDGET_MS: '10000'
       CRAWLER_PAGE_TIMEOUT_MS: '20000'
       # Stop accepting new pages at one hour, leaving time to verify and push the partial batch.
       CRAWLER_RUN_BUDGET_MS: '3600000'
