@@ -10,6 +10,7 @@ const concurrency = Math.max(1, Math.min(20, Number(process.env.CRAWLER_CONCURRE
 const browserConcurrency = Math.max(1, Math.min(concurrency, Number(process.env.CRAWLER_BROWSER_CONCURRENCY || Math.min(3, concurrency))));
 const retries = Math.max(0, Number(process.env.CRAWLER_RETRIES || 0));
 const pageTimeoutMs = Math.max(1000, Number(process.env.CRAWLER_PAGE_TIMEOUT_MS || 60000));
+const hardPageTimeoutMs = Math.max(pageTimeoutMs + 1000, Number(process.env.CRAWLER_HARD_PAGE_TIMEOUT_MS || pageTimeoutMs + 15000));
 const browserBudgetMs = Math.max(1000, Number(process.env.CRAWLER_BROWSER_BUDGET_MS || 10000));
 const runBudgetMs = Math.max(0, Number(process.env.CRAWLER_RUN_BUDGET_MS || 0));
 const fetchMode = process.env.CRAWLER_FETCH_MODE || 'hybrid';
@@ -303,7 +304,20 @@ export async function run(type = 'manual') {
       stoppedEarly = true;
       return;
     }
-    const result = await fetchOne(page.url, browserState);
+    const result = await Promise.race([
+      fetchOne(page.url, browserState),
+      sleep(hardPageTimeoutMs).then(() => ({
+        url: page.url,
+        responseUrl: '',
+        status: 0,
+        contentType: '',
+        body: '',
+        duration: hardPageTimeoutMs,
+        method: fetchMode,
+        fetchAttempts: 0,
+        error: 'page_hard_timeout',
+      })),
+    ]);
     result.pageAttempt = (page.crawl_attempts || 0) + 1;
     let meta = null;
     try { meta = compactMeta(result); } catch { meta = null; }
