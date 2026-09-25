@@ -9,12 +9,12 @@ const db = {
       bind(...args) {
         return {
           async run() {
-            if (sql.includes('INSERT OR IGNORE INTO search_pages (')) {
+            if (sql.includes('CREATE TRIGGER')) {
+              return { success: true };
+            } else if (sql.includes('INSERT OR IGNORE INTO search_pages (')) {
               const [url, title, description, icon_url, search_text] = args;
               if (rows.some((row) => row.url === url)) lastChanges = 0;
-              else { rows.push({ url, title, description, icon_url, search_text }); lastChanges = 1; }
-            } else if (sql.includes('INSERT INTO search_pages_fts')) {
-              if (lastChanges > 0) ftsRows.push({ url: args[0], search_text: args[1] });
+              else { rows.push({ url, title, description, icon_url, search_text }); ftsRows.push({ url, search_text }); lastChanges = 1; }
             }
             return { success: true };
           },

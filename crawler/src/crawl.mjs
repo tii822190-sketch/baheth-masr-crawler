@@ -48,11 +48,23 @@ function acquireBatch() {
 
 function acquireBrowserSlot(state) {
   if (state.active < state.limit) { state.active += 1; return Promise.resolve(); }
-  return new Promise((resolve) => state.waiters.push(resolve));
+  return new Promise((resolve, reject) => {
+    const waiter = {
+      resolve: () => { clearTimeout(waiter.timer); state.active += 1; resolve(); },
+      reject,
+      timer: setTimeout(() => {
+        const index = state.waiters.indexOf(waiter);
+        if (index >= 0) state.waiters.splice(index, 1);
+        reject(new Error('browser_slot_timeout'));
+      }, pageTimeoutMs),
+    };
+    state.waiters.push(waiter);
+  });
 }
 function releaseBrowserSlot(state) {
-  state.active -= 1;
-  state.waiters.shift()?.();
+  const waiter = state.waiters.shift();
+  if (waiter) waiter.resolve();
+  else state.active -= 1;
 }
 
 async function browserFetch(url, browserState) {
