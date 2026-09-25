@@ -1,6 +1,6 @@
--- Non-destructive migration for baheth-masr-search.
--- Existing search_text values are copied into the unique FTS source table.
--- No rows from search_pages or search_pages_fts are deleted.
+-- Historical phase-1 migration for baheth-masr-search.
+-- The final schema uses only search_pages and search_pages_fts.
+-- For an already migrated database, run migrate-search-pages-two-tables.sql.
 
 CREATE TABLE IF NOT EXISTS search_pages_fts_keys (
   url TEXT PRIMARY KEY NOT NULL,

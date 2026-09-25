@@ -66,8 +66,9 @@ function insertStatements(env, row) {
       INSERT OR IGNORE INTO search_pages (url, title, description, icon_url)
       VALUES (?, ?, ?, ?)
     `).bind(row.url, row.title, row.description, row.icon_url),
+    env.DB.prepare(`DELETE FROM search_pages_fts WHERE url = ?`).bind(row.url),
     env.DB.prepare(`
-      INSERT OR IGNORE INTO search_pages_fts_keys (url, search_text)
+      INSERT INTO search_pages_fts (url, search_text)
       VALUES (?, ?)
     `).bind(row.url, row.search_text),
   ];
