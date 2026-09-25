@@ -14,10 +14,9 @@ on:
         default: '5000'
         type: string
   schedule:
-    # GitHub Actions default timezone (UTC): 02:00, 03:40, 05:20, 07:00, 08:40, 10:20, 12:00, 13:40, 15:20, and 17:00.
-    - cron: '0 2,7,12,17 * * *'
-    - cron: '40 3,8,13 * * *'
-    - cron: '20 5,10,15 * * *'
+    # GitHub Actions default timezone (UTC): crawler at even hours and half-hours, plus 21:00, 21:30, and 22:00.
+    - cron: '0 2,4,6,8,10,12,14,16,18,20,21,22 * * *'
+    - cron: '30 2,4,6,8,10,12,14,16,18,20,21 * * *'
 
 concurrency:
   group: baheth-local-crawler-db

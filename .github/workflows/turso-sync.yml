@@ -3,8 +3,8 @@ name: Sync Index Results to D1 through Worker
 on:
   workflow_dispatch:
   schedule:
-    # GitHub Actions default timezone (UTC): daily at 01:00.
-    - cron: '0 1 * * *'
+    # GitHub Actions default timezone (UTC): five minutes after midnight.
+    - cron: '5 0 * * *'
 
 permissions:
   contents: write
