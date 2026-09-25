@@ -29,7 +29,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
-      CRAWLER_DB_PATH: db/crawler.sqlite
+      CRAWLER_DB_PATH: /tmp/crawler.sqlite
+      SUPABASE_URL: https://ysntytwkggxdapokglsc.supabase.co
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
       DISCOVERY_SITE_URL: ${{ inputs.site_url || '' }}
       DISCOVERY_MAX_PAGES_PER_SITE: '5000'
       DISCOVERY_MAX_SITEMAPS: ${{ github.ref_name == 'main' && '2000' || '100' }}
@@ -47,7 +49,11 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - name: Initialize the local three-table database
+      - name: Validate Supabase secret
+        run: test -n "$SUPABASE_SERVICE_ROLE_KEY"
+      - name: Pull crawler state from Supabase
+        run: node tools/pull-supabase-to-local.mjs
+      - name: Initialize the temporary crawler database
         run: node crawler/src/cli.mjs init
       - name: Load configured site seeds
         run: node tools/load-site-seeds.mjs
@@ -64,30 +70,5 @@ jobs:
           console.log(JSON.stringify({ tables, sites: db.prepare('SELECT COUNT(*) AS count FROM sites').get().count, queued_pages: db.prepare('SELECT COUNT(*) AS count FROM site_pages').get().count }, null, 2));
           db.close();
           NODE
-      - name: Save local crawler database
-        run: |
-          set -euo pipefail
-          target_ref="${GITHUB_REF_NAME:-main}"
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          for attempt in 1 2 3; do
-            git add db/crawler.sqlite
-            if git diff --cached --quiet; then
-              echo "No database changes to commit."
-              exit 0
-            fi
-            git commit -m "Run discovery spider and update local database"
-            if git push origin "HEAD:${target_ref}"; then
-              echo "Discovery database pushed successfully to ${target_ref} on attempt ${attempt}."
-              exit 0
-            fi
-            if [ "$attempt" -eq 3 ]; then
-              echo "Unable to push discovery database after ${attempt} attempts." >&2
-              exit 1
-            fi
-            echo "Remote changed during push; refreshing and repeating discovery (attempt $((attempt + 1)))."
-            git fetch origin "${target_ref}"
-            git reset --hard "origin/${target_ref}"
-            node crawler/src/cli.mjs init
-            node tools/discovery-spider.mjs
-          done
+      - name: Push updated crawler state to Supabase
+        run: node tools/push-local-to-supabase.mjs

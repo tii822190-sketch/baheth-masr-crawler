@@ -31,7 +31,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
-      CRAWLER_INPUT_DB_PATH: db/crawler.sqlite
+      CRAWLER_INPUT_DB_PATH: /tmp/crawler.sqlite
+      SUPABASE_URL: https://ysntytwkggxdapokglsc.supabase.co
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
       CRAWLER_FETCH_MODE: hybrid
       CRAWLER_BATCH_SIZE: ${{ inputs.batch_size || '2000' }}
       CRAWLER_MAX_PAGES: ${{ inputs.max_pages || '2000' }}
@@ -53,42 +55,18 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - name: Initialize the local three-table database
+      - name: Validate Supabase secret
+        run: test -n "$SUPABASE_SERVICE_ROLE_KEY"
+      - name: Pull crawler state from Supabase
+        run: node tools/pull-supabase-to-local.mjs
+      - name: Initialize the temporary crawler database
         run: node crawler/src/cli.mjs init
       - name: Run up to 2000 queued pages with graceful 80-minute budget
         run: bash tools/run-primary-crawler.sh
       - name: Verify local database
         run: node tools/verify-local-crawler-db.mjs
-      - name: Commit updated local database
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          for attempt in 1 2 3; do
-            git fetch origin main
-            if ! git diff --quiet HEAD..origin/main -- db/crawler.sqlite; then
-              echo "Remote database changed after this run started; refusing to overwrite it." >&2
-              echo "The crawler batch completed, but its SQLite result requires an explicit merge/reconciliation." >&2
-              exit 1
-            fi
-            git reset --mixed origin/main
-            git add db/crawler.sqlite
-            if git diff --cached --quiet; then
-              echo "No database changes to commit."
-              exit 0
-            fi
-            git commit -m "Run primary crawler and update local database"
-            if git push origin HEAD:main; then
-              echo "Database commit pushed successfully on attempt ${attempt}."
-              exit 0
-            fi
-            if [ "$attempt" -eq 3 ]; then
-              echo "Unable to push database after ${attempt} commit-only attempts." >&2
-              exit 1
-            fi
-            echo "Remote changed during push; refreshing base and retrying database commit only (attempt $((attempt + 1)))."
-            git reset --mixed origin/main
-          done
+      - name: Push updated crawler state to Supabase
+        run: node tools/push-local-to-supabase.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:

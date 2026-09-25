@@ -18,7 +18,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
-      CRAWLER_DB_PATH: db/crawler.sqlite
+      CRAWLER_DB_PATH: /tmp/crawler.sqlite
+      SUPABASE_URL: https://ysntytwkggxdapokglsc.supabase.co
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      SUPABASE_REPLACE_RESULTS: 'true'
       INGEST_URL: ${{ secrets.INGEST_URL }}
       INGEST_TOKEN: ${{ secrets.INGEST_TOKEN }}
       INGEST_BATCH_SIZE: '16'
@@ -34,6 +37,10 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Validate Supabase secret
+        run: test -n "$SUPABASE_SERVICE_ROLE_KEY"
+      - name: Pull crawler state from Supabase
+        run: node tools/pull-supabase-to-local.mjs
       - name: Validate Worker ingest secrets
         run: |
           test -n "$INGEST_URL"
@@ -51,28 +58,5 @@ jobs:
           console.log(JSON.stringify({ index_results_remaining: remaining, integrity: 'ok', remote_checks: 'disabled' }, null, 2));
           db.close();
           NODE
-      - name: Commit cleaned local database
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          for attempt in 1 2 3; do
-            git add db/crawler.sqlite
-            if git diff --cached --quiet; then
-              echo "No database changes to commit."
-              exit 0
-            fi
-            git commit -m "Use Worker to synchronize index results to D1"
-            if git push origin HEAD:main; then
-              echo "D1 sync database pushed successfully on attempt ${attempt}."
-              exit 0
-            fi
-            if [ "$attempt" -eq 3 ]; then
-              echo "Unable to push Turso sync database after ${attempt} attempts." >&2
-              exit 1
-            fi
-            echo "Remote changed during push; refreshing and repeating write-only sync (attempt $((attempt + 1)))."
-            git fetch origin main
-            git reset --hard origin/main
-            node tools/sync-to-ingest-worker.mjs
-          done
+      - name: Push synchronized crawler state to Supabase
+        run: node tools/push-local-to-supabase.mjs
