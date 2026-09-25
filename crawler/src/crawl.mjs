@@ -252,16 +252,34 @@ function markCorrupt(page) {
   removeFromQueue(page.id);
 }
 
-function emitPageProgress(event) {
-  const line = JSON.stringify({ type: 'crawler_page', ...event });
-  process.stderr.write(`[crawler] ${line}\n`);
-  const logPath = process.env.CRAWLER_PROGRESS_LOG_PATH;
-  if (logPath) fs.appendFileSync(logPath, `${line}\n`);
+export function createProgressReporter(total, { writeProgress = (message) => process.stderr.write(`${message}\n`), writeDetails = null } = {}) {
+  const pageEvents = [];
+  let completed = 0;
+  let lastMilestone = 0;
+  return {
+    record(event) {
+      pageEvents.push(JSON.stringify({ type: 'crawler_page', ...event }));
+      completed += 1;
+      if (!total) return;
+      const percent = Math.floor((completed / total) * 100);
+      const milestone = Math.floor(percent / 20) * 20;
+      if (milestone >= 20 && milestone > lastMilestone) {
+        writeProgress(`[crawler] batch progress ${percent}% (${completed}/${total})`);
+        lastMilestone = milestone;
+      }
+    },
+    flush() {
+      const details = pageEvents.length ? `${pageEvents.join('\n')}\n` : '';
+      if (writeDetails) writeDetails(details);
+      else if (process.env.CRAWLER_PROGRESS_LOG_PATH) fs.writeFileSync(process.env.CRAWLER_PROGRESS_LOG_PATH, details);
+    },
+  };
 }
 
 export async function run(type = 'manual') {
   const browserState = { active: 0, limit: browserConcurrency, waiters: [] };
   const { targets, phase } = acquireBatch();
+  const progress = createProgressReporter(targets.length);
   let success = 0; let review = 0; let corrupt = 0;
   const failureReasons = {};
   await mapLimit(targets, async (page) => {
@@ -300,7 +318,8 @@ export async function run(type = 'manual') {
         pageEvent = { url: page.url, outcome: 'needs_review', diagnostics: diagnosis };
       }
     }
-    emitPageProgress(pageEvent);
+    progress.record(pageEvent);
   }, concurrency);
+  progress.flush();
   return { phase, total: targets.length, success, needs_review: review, failure_reasons: failureReasons, corrupt, batch_size: batchSize, concurrency, browser_concurrency: browserConcurrency, retries, fetch_mode: fetchMode };
 }
