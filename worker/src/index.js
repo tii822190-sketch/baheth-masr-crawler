@@ -1,4 +1,4 @@
-const MAX_ROWS = 16;
+const MAX_ROWS = 100;
 const MAX_TEXT_LENGTH = 20000;
 
 function json(value, status = 200) {

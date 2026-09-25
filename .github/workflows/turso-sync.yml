@@ -26,7 +26,7 @@ jobs:
       SUPABASE_SITES_MODE: none
       INGEST_URL: ${{ secrets.INGEST_URL }}
       INGEST_TOKEN: ${{ secrets.INGEST_TOKEN }}
-      INGEST_BATCH_SIZE: '16'
+      INGEST_BATCH_SIZE: '100'
       INGEST_MAX_ROWS: '0'
       INGEST_RETRIES: '5'
     steps:
