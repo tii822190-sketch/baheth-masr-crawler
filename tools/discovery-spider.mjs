@@ -5,9 +5,11 @@ import * as cheerio from 'cheerio';
 import { feedCandidates, sitemapCandidates } from './sitemap-candidates.mjs';
 import { fetchRobotsPolicy, isRobotsAllowed } from './robots.mjs';
 import { canonicalize, declaredSitemapLinks, htmlArabicAlternateLinks, htmlSitemapLinks, isPageUrl, normalizeSitemapUrl, pageUrlDecision, shouldHydratePage, xmlLinks } from './sitemap-parser.mjs';
+import { pageLimitForSite } from './discovery-limits.mjs';
 
 const DB_PATH = process.env.CRAWLER_DB_PATH || 'db/crawler.sqlite';
 const MAX_PAGES_PER_SITE = Math.min(50000, Math.max(1, Number(process.env.DISCOVERY_MAX_PAGES_PER_SITE || 50000)));
+const MISRQURAN_MAX_PAGES_PER_SITE = Math.min(MAX_PAGES_PER_SITE, Math.max(1, Number(process.env.DISCOVERY_MISR_MAX_PAGES_PER_SITE || 30000)));
 const REQUEST_TIMEOUT_MS = Math.max(1000, Number(process.env.DISCOVERY_TIMEOUT_MS || 20000));
 const MAX_SITEMAPS = Math.max(1, Number(process.env.DISCOVERY_MAX_SITEMAPS || 2000));
 const RESUME_INCOMPLETE = /^(1|true|yes)$/i.test(process.env.DISCOVERY_RESUME_INCOMPLETE || '');
@@ -149,6 +151,7 @@ function parseCursor(raw, siteUrl) {
 function saveCursor(siteId, cursor) { db.prepare('UPDATE sites SET discovery_cursor=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(JSON.stringify(cursor), siteId); }
 
 async function discoverSite(site) {
+  const maxPages = pageLimitForSite(site.url, { defaultLimit: MAX_PAGES_PER_SITE, misrQuranLimit: MISRQURAN_MAX_PAGES_PER_SITE });
   const existing = db.prepare('SELECT COUNT(*) AS count FROM site_pages WHERE site_id=?').get(site.id).count;
   let totalAccepted = existing; let pagesAdded = 0; let sitemapCount = 0;
   const retryNotPages = site.crawl_status === 'not_pages';
@@ -164,7 +167,7 @@ async function discoverSite(site) {
     const state = { ...cursor, robotsStatus: robotsPolicy.denyAll ? 'unreachable_fail_closed' : 'loaded' };
     saveCursor(site.id, state);
     db.prepare('UPDATE sites SET crawl_status=\'pending\',updated_at=CURRENT_TIMESTAMP WHERE id=?').run(site.id);
-    return { site_id: site.id, site: site.url, status: 'pending', pages_added: 0, pages_total: totalAccepted, max_pages: MAX_PAGES_PER_SITE, robots_status: state.robotsStatus, reason: 'robots_txt_unreachable_fail_closed' };
+    return { site_id: site.id, site: site.url, status: 'pending', pages_added: 0, pages_total: totalAccepted, max_pages: maxPages, robots_status: state.robotsStatus, reason: 'robots_txt_unreachable_fail_closed' };
   };
   if (robotsPolicy.denyAll) return saveBlockedState();
 
@@ -175,7 +178,7 @@ async function discoverSite(site) {
   };
   const homepage = isPageUrl(site.url, site.url);
   let homepageDocument = null;
-  if (homepage && isRobotsAllowed(robotsPolicy, homepage) && totalAccepted < MAX_PAGES_PER_SITE) {
+  if (homepage && isRobotsAllowed(robotsPolicy, homepage) && totalAccepted < maxPages) {
     const result = insertPage(homepage);
     if (result.changes) { pagesAdded += 1; totalAccepted += 1; }
     homepageDocument = await fetchDocument(homepage);
@@ -243,7 +246,7 @@ async function discoverSite(site) {
     const attempt = { url: safeUrl(current), outcome: 'parsed', reason: null, http_status: document.status, content_type: document.contentType, bytes: document.bytes, format, pages_found: pages.length, rejected, nested_sitemaps_found: nestedMaps.length, nested_sitemaps_queued: nestedAdded, pages_added: 0 };
     sitemapDiagnostics.push(attempt);
     const pageSlice = pages.slice(pageIndex);
-    const allowed = Math.max(0, MAX_PAGES_PER_SITE - totalAccepted);
+    const allowed = Math.max(0, maxPages - totalAccepted);
     if (allowed === 0) { saveCursor(site.id, { pendingSitemaps: pending, seenSitemaps: [...seen], currentSitemap: current, currentPageIndex: pageIndex, sitemapDiagnostics: sitemapDiagnostics.slice(-50) }); break; }
     const candidates = pageSlice.slice(0, allowed);
     for (let i = 0; i < candidates.length; i += 1) {
@@ -252,18 +255,18 @@ async function discoverSite(site) {
       const result = insertPage(page); if (result.changes) { pagesAdded += 1; totalAccepted += 1; attempt.pages_added += 1; }
     }
     pageIndex += candidates.length;
-    const reachedLimit = totalAccepted >= MAX_PAGES_PER_SITE && pageIndex < pages.length;
+    const reachedLimit = totalAccepted >= maxPages && pageIndex < pages.length;
     if (reachedLimit) { saveCursor(site.id, { pendingSitemaps: pending, seenSitemaps: [...seen], currentSitemap: current, currentPageIndex: pageIndex, sitemapDiagnostics: sitemapDiagnostics.slice(-50) }); break; }
     seen.add(current); lastCompletedSitemap = current; lastCompletedPageIndex = pageIndex;
     current = null; pageIndex = 0;
     saveCursor(site.id, { pendingSitemaps: pending, seenSitemaps: [...seen], currentSitemap: lastCompletedSitemap, currentPageIndex: lastCompletedPageIndex, sitemapDiagnostics: sitemapDiagnostics.slice(-50) });
   }
   let feedFallback = { attempted: false, feedsScanned: 0, pagesFound: 0, pagesAdded: 0, failures: [] };
-  if (pagesAdded <= 1 && homepage && totalAccepted < MAX_PAGES_PER_SITE) {
+  if (pagesAdded <= 1 && homepage && totalAccepted < maxPages) {
     feedFallback.attempted = true;
     const feedSeen = new Set();
     for (const feed of feedCandidates(site.url)) {
-      if (totalAccepted >= MAX_PAGES_PER_SITE || feedSeen.has(feed)) break;
+      if (totalAccepted >= maxPages || feedSeen.has(feed)) break;
       feedSeen.add(feed);
       if (!isRobotsAllowed(robotsPolicy, feed)) {
         feedFallback.feedsScanned += 1;
@@ -278,7 +281,7 @@ async function discoverSite(site) {
       feedFallback.pagesFound += parsed.pages.length;
       for (const [reason, count] of Object.entries(parsed.rejected || {})) rejectedPages[reason] = (rejectedPages[reason] || 0) + count;
       for (const page of parsed.pages) {
-        if (totalAccepted >= MAX_PAGES_PER_SITE) break;
+        if (totalAccepted >= maxPages) break;
         if (!isRobotsAllowed(robotsPolicy, page)) { rejectedPages.robots_disallowed = (rejectedPages.robots_disallowed || 0) + 1; continue; }
         const result = insertPage(page);
         if (result.changes) { pagesAdded += 1; totalAccepted += 1; feedFallback.pagesAdded += 1; }
@@ -286,7 +289,7 @@ async function discoverSite(site) {
     }
   }
   let browserFallback = { attempted: false, pagesVisited: 0, linksFound: 0, linksAdded: 0, contentLinksFound: 0, contentLinksAdded: 0, languageLinksAdded: 0, arabicLinksExpanded: 0, maxDepthReached: 0, renderMethods: {}, failures: [], rejected: {} };
-  if (pagesAdded <= 1 && homepage && isRobotsAllowed(robotsPolicy, homepage) && totalAccepted < MAX_PAGES_PER_SITE) {
+  if (pagesAdded <= 1 && homepage && isRobotsAllowed(robotsPolicy, homepage) && totalAccepted < maxPages) {
     browserFallback.attempted = true;
     const deadline = Date.now() + BROWSER_FALLBACK_TOTAL_MS;
     const frontier = [{ url: homepage, depth: 0, document: homepageDocument }];
@@ -294,7 +297,7 @@ async function discoverSite(site) {
     const queued = new Set([homepage]);
     const candidateSeen = new Set();
     const addBrowserPage = (url) => {
-      if (!url || totalAccepted >= MAX_PAGES_PER_SITE || !isRobotsAllowed(robotsPolicy, url)) return false;
+      if (!url || totalAccepted >= maxPages || !isRobotsAllowed(robotsPolicy, url)) return false;
       queued.add(url);
       const result = insertPage(url);
       if (result.changes) {
@@ -304,7 +307,7 @@ async function discoverSite(site) {
       }
       return true;
     };
-    while (frontier.length && visited.size < BROWSER_FALLBACK_MAX_PAGES && totalAccepted < MAX_PAGES_PER_SITE && Date.now() < deadline) {
+    while (frontier.length && visited.size < BROWSER_FALLBACK_MAX_PAGES && totalAccepted < maxPages && Date.now() < deadline) {
       const page = frontier.shift();
       if (visited.has(page.url) || !isRobotsAllowed(robotsPolicy, page.url)) continue;
       visited.add(page.url);
@@ -336,12 +339,12 @@ async function discoverSite(site) {
     }
     if (frontier.length && Date.now() >= deadline) browserFallback.failures.push({ reason: 'browser_fallback_time_budget_exhausted', remaining_pages: frontier.length });
   }
-  const incomplete = totalAccepted >= MAX_PAGES_PER_SITE && (current || pending.length || seen.size >= MAX_SITEMAPS);
+  const incomplete = totalAccepted >= maxPages && (current || pending.length || seen.size >= MAX_SITEMAPS);
   const fallbackFailed = browserFallback.attempted && browserFallback.contentLinksFound === 0;
   const status = fallbackFailed ? 'not_pages' : incomplete ? 'incomplete' : 'completed';
   const finalCursor = { pendingSitemaps: pending, seenSitemaps: [...seen], currentSitemap: current || lastCompletedSitemap, currentPageIndex: current ? pageIndex : lastCompletedPageIndex, sitemapDiagnostics: sitemapDiagnostics.slice(-50), rejectedPages, feedFallback, browserFallback };
   db.prepare('UPDATE sites SET crawl_status=?,discovery_cursor=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(status, JSON.stringify(finalCursor), site.id);
-  return { site_id: site.id, site: site.url, status, sitemaps_scanned: sitemapCount, valid_sitemaps: validSitemaps, parsed_pages: parsedPages, nested_sitemaps_found: nestedSitemapsFound, homepage_sitemaps_found: homepageSitemaps.length, sitemap_diagnostics: sitemapDiagnostics.slice(-50), rejected_page_urls: rejectedPages, feeds_scanned: feedFallback.feedsScanned, pages_added: pagesAdded, pages_total: totalAccepted, max_pages: MAX_PAGES_PER_SITE, resume_point_saved: incomplete, feed_fallback: feedFallback, browser_fallback: browserFallback, validation: 'deferred_to_crawler' };
+  return { site_id: site.id, site: site.url, status, sitemaps_scanned: sitemapCount, valid_sitemaps: validSitemaps, parsed_pages: parsedPages, nested_sitemaps_found: nestedSitemapsFound, homepage_sitemaps_found: homepageSitemaps.length, sitemap_diagnostics: sitemapDiagnostics.slice(-50), rejected_page_urls: rejectedPages, feeds_scanned: feedFallback.feedsScanned, pages_added: pagesAdded, pages_total: totalAccepted, max_pages: maxPages, resume_point_saved: incomplete, feed_fallback: feedFallback, browser_fallback: browserFallback, validation: 'deferred_to_crawler' };
 }
 
 const requestedSite = canonicalize(process.env.DISCOVERY_SITE_URL || '');
