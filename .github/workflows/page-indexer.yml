@@ -63,7 +63,7 @@ jobs:
         run: node tools/pull-supabase-to-local.mjs
       - name: Initialize the temporary crawler database
         run: node crawler/src/cli.mjs init
-      - name: Run up to 2000 queued pages with graceful 80-minute budget
+      - name: Run up to 5000 queued pages with graceful one-hour budget
         run: bash tools/run-primary-crawler.sh
       - name: Verify local database
         run: node tools/verify-local-crawler-db.mjs

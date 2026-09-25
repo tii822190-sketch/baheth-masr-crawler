@@ -7,7 +7,7 @@ batch_number=0
 : > /tmp/primary-crawler-result.jsonl
 export CRAWLER_PROGRESS_LOG_PATH=/tmp/primary-crawler-result.jsonl
 
-while [ "$processed_pages" -lt "${CRAWLER_MAX_PAGES:-1000}" ]; do
+while [ "$processed_pages" -lt "${CRAWLER_MAX_PAGES:-5000}" ]; do
   batch_number=$((batch_number + 1))
   echo "Starting crawler batch ${batch_number} (processed=${processed_pages})."
   output=$(node crawler/src/cli.mjs manual)
