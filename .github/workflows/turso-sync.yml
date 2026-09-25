@@ -5,9 +5,6 @@ on:
   schedule:
     # GitHub Actions default timezone (UTC): daily at 01:00.
     - cron: '0 1 * * *'
-  workflow_run:
-    workflows: ["Page Indexer"]
-    types: [completed]
 
 permissions:
   contents: write
@@ -18,7 +15,6 @@ concurrency:
 
 jobs:
   sync:
-    if: ${{ github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main') }}
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
