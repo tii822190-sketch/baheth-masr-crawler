@@ -7,7 +7,7 @@ import { fetchRobotsPolicy, isRobotsAllowed } from './robots.mjs';
 import { canonicalize, declaredSitemapLinks, htmlArabicAlternateLinks, htmlSitemapLinks, isPageUrl, normalizeSitemapUrl, pageUrlDecision, shouldHydratePage, xmlLinks } from './sitemap-parser.mjs';
 
 const DB_PATH = process.env.CRAWLER_DB_PATH || 'db/crawler.sqlite';
-const MAX_PAGES_PER_SITE = Math.min(10000, Math.max(1, Number(process.env.DISCOVERY_MAX_PAGES_PER_SITE || 10000)));
+const MAX_PAGES_PER_SITE = Math.min(20000, Math.max(1, Number(process.env.DISCOVERY_MAX_PAGES_PER_SITE || 20000)));
 const REQUEST_TIMEOUT_MS = Math.max(1000, Number(process.env.DISCOVERY_TIMEOUT_MS || 20000));
 const MAX_SITEMAPS = Math.max(1, Number(process.env.DISCOVERY_MAX_SITEMAPS || 2000));
 const RESUME_INCOMPLETE = /^(1|true|yes)$/i.test(process.env.DISCOVERY_RESUME_INCOMPLETE || '');

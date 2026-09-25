@@ -10,12 +10,12 @@ import Database from 'better-sqlite3';
 
 const root = path.resolve(new URL('../..', import.meta.url).pathname);
 
-test('discovery hard-caps at 10,000 unique pages per site and stores a resume cursor', async () => {
+test('discovery hard-caps at 20,000 unique pages per site and stores a resume cursor', async () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'baheth-discovery-cap-'));
   const dbPath = path.join(tempDir, 'crawler.sqlite');
   let siteUrl = '';
   const sitemap = [];
-  for (let i = 1; i <= 10020; i += 1) sitemap.push(`<url><loc>${siteUrl}article/${i}</loc></url>`);
+  for (let i = 1; i <= 20020; i += 1) sitemap.push(`<url><loc>${siteUrl}article/${i}</loc></url>`);
   const server = http.createServer((request, response) => {
     if (request.url === '/robots.txt') {
       response.writeHead(200, { 'content-type': 'text/plain' });
@@ -82,11 +82,11 @@ test('discovery hard-caps at 10,000 unique pages per site and stores a resume cu
     const site = check.prepare('SELECT crawl_status,discovery_cursor FROM sites WHERE url=?').get(siteUrl);
     const unique = check.prepare('SELECT COUNT(DISTINCT url) AS count FROM site_pages').get().count;
     check.close();
-    assert.equal(result.pages_total, 10000);
-    assert.equal(result.max_pages, 10000);
+    assert.equal(result.pages_total, 20000);
+    assert.equal(result.max_pages, 20000);
     assert.equal(result.status, 'incomplete');
-    assert.equal(count, 10000);
-    assert.equal(unique, 10000);
+    assert.equal(count, 20000);
+    assert.equal(unique, 20000);
     assert.equal(site.crawl_status, 'incomplete');
     assert.ok(site.discovery_cursor);
   } finally {
