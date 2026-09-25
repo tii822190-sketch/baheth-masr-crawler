@@ -1,25 +1,19 @@
 import fs from 'node:fs';
-import { spawn } from 'node:child_process';
 import { db, canonicalize } from './db.mjs';
-import { extractHtml } from './extract.mjs';
+import { extractLightHtml } from './light-extract.mjs';
 import taxonomy from '../../taxonomy/search-taxonomy.json' with { type: 'json' };
 
 const batchSize = Math.max(1, Number(process.env.CRAWLER_BATCH_SIZE || 20));
 const maxPages = Math.max(1, Number(process.env.CRAWLER_MAX_PAGES || batchSize));
-const concurrency = Math.max(1, Math.min(20, Number(process.env.CRAWLER_CONCURRENCY || 15)));
-const browserConcurrency = Math.max(1, Math.min(concurrency, Number(process.env.CRAWLER_BROWSER_CONCURRENCY || Math.min(3, concurrency))));
+const concurrency = Math.max(1, Math.min(30, Number(process.env.CRAWLER_CONCURRENCY || 25)));
+const browserConcurrency = 0;
 const retries = Math.max(0, Number(process.env.CRAWLER_RETRIES || 0));
-const pageTimeoutMs = Math.max(1000, Number(process.env.CRAWLER_PAGE_TIMEOUT_MS || 60000));
-const hardPageTimeoutMs = Math.max(pageTimeoutMs + 1000, Number(process.env.CRAWLER_HARD_PAGE_TIMEOUT_MS || pageTimeoutMs + 15000));
-const browserBudgetMs = Math.max(1000, Number(process.env.CRAWLER_BROWSER_BUDGET_MS || 10000));
+const pageTimeoutMs = Math.max(1000, Number(process.env.CRAWLER_PAGE_TIMEOUT_MS || 20000));
 const runBudgetMs = Math.max(0, Number(process.env.CRAWLER_RUN_BUDGET_MS || 0));
-const fetchMode = process.env.CRAWLER_FETCH_MODE || 'hybrid';
+const fetchMode = 'http';
 const retryLimit = Math.max(1, Number(process.env.CRAWLER_REVIEW_RETRIES || 1));
-const minExtractedTextChars = Math.max(20, Number(process.env.CRAWLER_MIN_EXTRACTED_TEXT_CHARS || 80));
+const minExtractedTextChars = 1;
 const REQUIRED_METADATA_FIELDS = ['url', 'title', 'description', 'iconUrl', 'keywords', 'snippet'];
-const browserBinary = process.env.CRAWLER_BROWSER_BIN || [
-  '/usr/bin/chromium', '/usr/bin/chromium-browser', '/usr/bin/google-chrome', '/usr/bin/google-chrome-stable',
-].find((candidate) => fs.existsSync(candidate)) || 'chromium';
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function acquireBatch() {
@@ -47,53 +41,6 @@ function acquireBatch() {
   return { targets: candidates, phase: pending.length ? 'pending' : 'review' };
 }
 
-function acquireBrowserSlot(state) {
-  if (state.active < state.limit) { state.active += 1; return Promise.resolve(); }
-  return new Promise((resolve, reject) => {
-    const waiter = {
-      resolve: () => { clearTimeout(waiter.timer); state.active += 1; resolve(); },
-      reject,
-      timer: setTimeout(() => {
-        const index = state.waiters.indexOf(waiter);
-        if (index >= 0) state.waiters.splice(index, 1);
-        reject(new Error('browser_slot_timeout'));
-      }, pageTimeoutMs),
-    };
-    state.waiters.push(waiter);
-  });
-}
-function releaseBrowserSlot(state) {
-  const waiter = state.waiters.shift();
-  if (waiter) waiter.resolve();
-  else state.active -= 1;
-}
-
-async function browserFetch(url, browserState) {
-  await acquireBrowserSlot(browserState);
-  try {
-    return await new Promise((resolve, reject) => {
-      const started = Date.now();
-      const child = spawn(browserBinary, [
-        '--headless=new', '--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage',
-        `--virtual-time-budget=${browserBudgetMs}`, '--run-all-compositor-stages-before-draw', '--dump-dom', url,
-      ], { stdio: ['ignore', 'pipe', 'pipe'] });
-      let body = '';
-      let error = '';
-      const timer = setTimeout(() => { child.kill('SIGKILL'); reject(new Error('browser_timeout')); }, pageTimeoutMs);
-      child.stdout.on('data', (chunk) => { body += chunk; });
-      child.stderr.on('data', (chunk) => { error += chunk; });
-      child.once('error', (spawnError) => { clearTimeout(timer); reject(spawnError); });
-      child.on('close', (code) => {
-        clearTimeout(timer);
-        if (code === 0 && body.trim()) resolve({ url, responseUrl: url, status: 200, contentType: 'text/html', body, duration: Date.now() - started, method: 'browser' });
-        else reject(new Error(error.trim().slice(-300) || `browser_exit_${code}`));
-      });
-    });
-  } finally {
-    releaseBrowserSlot(browserState);
-  }
-}
-
 async function httpFetch(url) {
   const started = Date.now();
   const controller = new AbortController();
@@ -106,43 +53,19 @@ async function httpFetch(url) {
   }
 }
 
+// Compatibility export only; the production crawler never invokes a browser fallback.
 export function shouldUseBrowserFallback(result, meta) {
   const contentType = String(result?.contentType || '').toLowerCase();
-  const extractedTextLength = String(meta?.extractedText || '').trim().length;
-  return Number(result?.status || 0) >= 400
-    || !contentType.includes('html')
-    || String(result?.body || '').length < 200
-    || meta?.qualityStatus === 'dynamic_content'
-    || meta?.qualityStatus === 'thin_content'
-    || meta?.qualityStatus === 'blocked_challenge'
-    || extractedTextLength < minExtractedTextChars;
+  return Number(result?.status || 0) >= 400 || !contentType.includes('html') || !String(meta?.extractedText || '').trim();
 }
 
-async function fetchOne(url, browserState) {
+async function fetchOne(url) {
   let lastError = '';
   let fetchAttempts = 0;
   for (let attempt = 0; attempt <= retries; attempt += 1) {
     fetchAttempts = attempt + 1;
     try {
-      if (fetchMode === 'browser') return { ...(await browserFetch(url, browserState)), fetchAttempts };
       const http = { ...(await httpFetch(url)), fetchAttempts };
-      if (fetchMode === 'hybrid') {
-        const httpMeta = extractHtml(http.body, http.responseUrl || http.url, http.contentType || 'text/html');
-        if (shouldUseBrowserFallback(http, httpMeta)) {
-          try {
-            const browser = await browserFetch(url, browserState);
-            const browserMeta = extractHtml(browser.body, browser.responseUrl || browser.url, browser.contentType || 'text/html');
-            const httpTextLength = String(httpMeta.extractedText || '').trim().length;
-            const browserTextLength = String(browserMeta.extractedText || '').trim().length;
-            if (browserTextLength > httpTextLength) {
-              return { ...browser, fetchAttempts, browserFallbackAttempted: true, browserFallbackFromStatus: http.status, browserFallbackChoice: 'browser', browserFallbackHttpTextLength: httpTextLength, browserFallbackRenderedTextLength: browserTextLength, httpDurationMs: http.duration };
-            }
-            return { ...http, browserFallbackAttempted: true, browserFallbackChoice: 'http', browserFallbackHttpTextLength: httpTextLength, browserFallbackRenderedTextLength: browserTextLength, browserFallbackError: 'rendered_text_not_improved' };
-          } catch (error) {
-            return { ...http, browserFallbackAttempted: true, browserFallbackChoice: 'http', browserFallbackError: String(error).slice(0, 240) };
-          }
-        }
-      }
       return http;
     } catch (error) {
       lastError = String(error);
@@ -184,13 +107,13 @@ export function buildSearchKeywords(meta) {
   return [...new Set(values.map((value) => clean(value, 80)).filter(Boolean))].join('، ');
 }
 function compactMeta(result) {
-  const meta = extractHtml(result.body, result.responseUrl || result.url, result.contentType || 'text/html');
+  const meta = extractLightHtml(result.body, result.responseUrl || result.url, result.contentType || 'text/html');
   return {
     url: canonicalize(result.responseUrl || result.url) || result.url,
     title: clean(meta.title),
     description: clean(meta.description),
     iconUrl: clean(meta.iconUrl, 1000),
-    keywords: buildSearchKeywords(meta),
+    keywords: '',
     snippet: clean(meta.searchSnippet || meta.summary || meta.description),
     qualityStatus: meta.qualityStatus || 'unknown',
     extractedTextLength: String(meta.extractedText || '').trim().length,
@@ -200,7 +123,7 @@ function compactMeta(result) {
 export function isComplete(result, meta) {
   if (result.error || result.status < 200 || result.status >= 400 || !result.contentType.toLowerCase().includes('html')) return false;
   if (meta.qualityStatus !== 'good' || Number(meta.extractedTextLength || 0) < minExtractedTextChars) return false;
-  return REQUIRED_METADATA_FIELDS.every((field) => Boolean(meta[field]));
+  return REQUIRED_METADATA_FIELDS.filter((field) => field !== 'keywords').every((field) => Boolean(meta[field]));
 }
 
 export function diagnoseReview(result, meta) {
@@ -291,7 +214,6 @@ export function createProgressReporter(total, { writeProgress = (message) => pro
 }
 
 export async function run(type = 'manual') {
-  const browserState = { active: 0, limit: browserConcurrency, waiters: [] };
   const { targets, phase } = acquireBatch();
   const progress = createProgressReporter(targets.length);
   const deadline = runBudgetMs > 0 ? Date.now() + runBudgetMs : Infinity;
@@ -304,20 +226,7 @@ export async function run(type = 'manual') {
       stoppedEarly = true;
       return;
     }
-    const result = await Promise.race([
-      fetchOne(page.url, browserState),
-      sleep(hardPageTimeoutMs).then(() => ({
-        url: page.url,
-        responseUrl: '',
-        status: 0,
-        contentType: '',
-        body: '',
-        duration: hardPageTimeoutMs,
-        method: fetchMode,
-        fetchAttempts: 0,
-        error: 'page_hard_timeout',
-      })),
-    ]);
+    const result = await fetchOne(page.url);
     result.pageAttempt = (page.crawl_attempts || 0) + 1;
     let meta = null;
     try { meta = compactMeta(result); } catch { meta = null; }

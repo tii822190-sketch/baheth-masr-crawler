@@ -35,13 +35,12 @@ jobs:
       SUPABASE_URL: https://ysntytwkggxdapokglsc.supabase.co
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
       SUPABASE_SYNC_QUEUE_DELETES: 'true'
-      CRAWLER_FETCH_MODE: hybrid
+      CRAWLER_FETCH_MODE: http
       CRAWLER_BATCH_SIZE: ${{ inputs.batch_size || '2000' }}
       CRAWLER_MAX_PAGES: ${{ inputs.max_pages || '2000' }}
-      CRAWLER_CONCURRENCY: '15'
-      CRAWLER_BROWSER_CONCURRENCY: '5'
-      CRAWLER_BROWSER_BUDGET_MS: '10000'
-      CRAWLER_PAGE_TIMEOUT_MS: '60000'
+      CRAWLER_CONCURRENCY: '25'
+      CRAWLER_BROWSER_CONCURRENCY: '0'
+      CRAWLER_PAGE_TIMEOUT_MS: '20000'
       # Stop accepting new pages at one hour, leaving time to verify and push the partial batch.
       CRAWLER_RUN_BUDGET_MS: '3600000'
       CRAWLER_RETRIES: '0'
