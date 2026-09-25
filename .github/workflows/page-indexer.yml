@@ -72,7 +72,7 @@ jobs:
         with:
           name: page-indexer-${{ github.run_id }}
           path: |
-            db/crawler.sqlite
+            /tmp/crawler.sqlite
             /tmp/primary-crawler-result.json
             /tmp/primary-crawler-result.jsonl
           retention-days: 7

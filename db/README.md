@@ -1,39 +1,42 @@
-# قاعدة البيانات المحلية
+# قاعدة بيانات الزاحف الخارجية
 
-قاعدة التشغيل الوحيدة هي `db/crawler.sqlite`. تُحفظ داخل المستودع لأن Workflows الخاصة بالاكتشاف والفهرسة والمزامنة تعمل بالتتابع على الملف نفسه، ثم تحفظ التغييرات في Git.
+مصدر الحقيقة التشغيلي هو مشروع Supabase `baheth-masr-crawler` في Frankfurt. تحفظ Workflows الخاصة بالاكتشاف والفهرسة والمزامنة الحالة في Supabase، ولا تحفظ قاعدة التشغيل داخل Git.
 
-## الجداول التطبيقية
+## الجداول الخارجية
 
-| الجدول | الأعمدة المهمة | الاستخدام |
-| --- | --- | --- |
-| `sites` | `url`, `crawl_status`, `discovery_cursor`, `created_at`, `updated_at` | سجل المواقع ونقطة الاستكمال الخاصة باكتشاف Sitemap والروابط |
-| `site_pages` | `site_id`, `url`, `crawl_status`, `crawl_attempts` | طابور الصفحات التي اكتشفها العنكبوت ولم تُفهرس بعد |
-| `index_results` | `url`, `title`, `description`, `icon_url`, `keywords`, `snippet`, `created_at`, `updated_at` | نتائج الفهرسة المكتملة التي تنتظر المزامنة إلى Turso |
+| جدول Supabase | الاستخدام |
+| --- | --- |
+| `crawler_sites` | سجل المواقع وحالة الاكتشاف ونقطة استكمال Sitemap |
+| `crawler_queue` | طابور الصفحات التي اكتشفها العنكبوت ولم تُفهرس بعد |
+| `crawler_results` | نتائج الفهرسة المكتملة التي تنتظر المزامنة إلى Worker ثم D1/Turso |
+| `crawler_attempts` | سجل اختياري لمحاولات الزحف وتشخيص الأخطاء |
 
-جميع الروابط في `sites` و`site_pages` و`index_results` فريدة. ويرتبط كل صف في `site_pages` بموقع عبر `site_id` مع حذف الصفوف التابعة تلقائيًا عند حذف الموقع. توجد فهارس على حالة الطابور، وعلى الموقع، وعلى رابط نتيجة الفهرسة.
+الروابط في `crawler_sites`, `crawler_queue`, و`crawler_results` فريدة. توجد فهارس على الحالة والموقع والقفل المؤقت للطابور. تستخدم الدوال `claim_crawler_queue`, `finish_crawler_queue`, و`recover_stale_crawler_queue` للحجز واستعادة الصفحات العالقة عند تشغيل عمال متعددين مستقبلًا.
 
-## الحالات
+## الحماية
 
-حالات `sites` هي `pending` و`processing` و`completed` و`incomplete` و`not_pages` و`failed` و`error`. يختار العنكبوت `pending` افتراضيًا، ويمكنه استئناف `incomplete` عند ضبط `DISCOVERY_RESUME_INCOMPLETE=true`.
+Row Level Security مفعّل على كل الجداول. لا تستخدم Workflows مفتاح anon أو publishable؛ تستخدم `SUPABASE_SERVICE_ROLE_KEY` من GitHub Actions Secrets فقط. لا يُسمح بوضع المفتاح في المستودع أو في كود المتصفح.
 
-حالات `site_pages` المستخدمة أثناء الزحف هي `pending` و`queued` و`processing` و`needs_review` و`corrupt`. تعاد الصفحات المتوقفة في `processing` إلى `pending` عند بدء دفعة جديدة. الصفحة الناجحة تُنقل إلى `index_results` ثم تُحذف من الطابور. الصفحة التي تفشل تنتقل إلى `needs_review`، ثم إلى `corrupt` وتُحذف بعد تجاوز حد المحاولات.
+## دورة التشغيل
 
-## التهيئة والتحقق
+كل Workflow ينفذ الدورة التالية:
 
-ينفذ `crawler/src/db.mjs` التهيئة عند كل تشغيل للـ CLI. ينشئ الجداول والفهارس عند غيابها، ويضيف `discovery_cursor` إلى قواعد البيانات القديمة، ويعيد بناء الجداول القديمة إذا كان قيد حالات المواقع لا يتضمن الحالات الحالية. وفي النهاية ينفذ `PRAGMA integrity_check` ويرفض التشغيل إذا لم تكن النتيجة `ok`.
+1. يسحب `crawler_sites`, `crawler_queue`, و`crawler_results` إلى SQLite مؤقت داخل `/tmp` في GitHub Runner.
+2. يشغّل الكود الحالي للعنكبوت أو الزاحف أو المزامنة على قاعدة العمل المؤقتة.
+3. يتحقق من سلامة قاعدة العمل المؤقتة.
+4. يرفع التغييرات إلى Supabase.
+5. ينتهي الـ Runner وتُحذف قاعدة SQLite المؤقتة معه.
 
-لتهيئة القاعدة أو التحقق منها محليًا:
+هذه الطبقة الانتقالية تحافظ على اختبارات وكود SQLite الحاليين، لكنها تمنع تخزين حالة التشغيل أو نتائجها في Git وتزيل تعارضات الملفات الثنائية بين التشغيلات.
 
-```bash
-npm run db:init
-```
+## المسارات المحلية
 
-يمكن تغيير مسار القاعدة عبر `CRAWLER_INPUT_DB_PATH` في CLI أو `CRAWLER_DB_PATH` في أدوات الاكتشاف والمزامنة، بحسب الأداة المستخدمة. المسار الافتراضي هو `db/crawler.sqlite`.
+يمكن تغيير مسار قاعدة العمل المؤقتة عبر `CRAWLER_INPUT_DB_PATH` في CLI أو `CRAWLER_DB_PATH` في أدوات الاكتشاف والمزامنة. لا يوجد ملف تشغيل دائم باسم `db/crawler.sqlite` داخل المستودع؛ الاختبارات تنشئ قواعد مؤقتة خاصة بها.
 
-## دورة البيانات
+## المزامنة
 
-يضيف `tools/discovery-spider.mjs` الروابط المقبولة إلى `site_pages` فقط؛ ولا يفحص صلاحية كل صفحة أثناء الاكتشاف. يقرأ `crawler/src/crawl.mjs` الطابور، ويكتب الصفحات المكتملة إلى `index_results`.
+تقرأ المزامنة نتائج `crawler_results` من Supabase، وترسلها إلى Worker ingest، ثم ترفع الحالة المنظفة إلى Supabase فقط بعد نجاح الإرسال والتحقق. لا تُحذف النتائج الخارجية إذا فشل Worker أو فشل التحقق.
 
-ينقل `tools/sync-to-turso.mjs` النتائج إلى جدول Turso ذي الأعمدة الستة `url` و`title` و`description` و`icon_url` و`snippet` و`keywords`. وبعد نجاح النقل والتحقق يحذف الصفوف المنقولة من `index_results` داخل معاملة محلية واحدة. لذلك لا تُعد `index_results` نسخة أرشيفية طويلة الأجل؛ النسخة طويلة الأجل موجودة في `search_pages` و`search_pages_fts` داخل Turso.
+## النسخ الاحتياطية
 
-لا توجد قاعدة staging أو قاعدة خارجية أخرى في مسار التشغيل الأساسي.
+النسخ القديمة من SQLite أزيلت من تاريخ Git لتجنب تضخم المستودع. النسخة التشغيلية موجودة في Supabase، ويمكن أخذ backup من قاعدة Supabase عند الحاجة بدلًا من commit ثنائي متكرر.
