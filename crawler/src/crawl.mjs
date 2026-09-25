@@ -271,7 +271,7 @@ export function createProgressReporter(total, { writeProgress = (message) => pro
     flush() {
       const details = pageEvents.length ? `${pageEvents.join('\n')}\n` : '';
       if (writeDetails) writeDetails(details);
-      else if (process.env.CRAWLER_PROGRESS_LOG_PATH) fs.writeFileSync(process.env.CRAWLER_PROGRESS_LOG_PATH, details);
+      else if (process.env.CRAWLER_PROGRESS_LOG_PATH) fs.appendFileSync(process.env.CRAWLER_PROGRESS_LOG_PATH, details);
     },
   };
 }
