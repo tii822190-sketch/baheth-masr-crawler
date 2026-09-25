@@ -14,8 +14,10 @@ on:
         default: false
         type: boolean
   schedule:
-    # Three runs per day: 00:00, 08:00, and 16:00 UTC (24:00 is 00:00).
-    - cron: '0 0,8,16 * * *'
+    # Egypt local time (UTC+03): 02:00, 06:00, 09:00, 13:00, 18:00, and 22:30.
+    # GitHub Actions cron is UTC; the schedules below are the corresponding UTC times.
+    - cron: '0 3,6,10,15,23 * * *'
+    - cron: '30 19 * * *'
 
 permissions:
   contents: write
@@ -31,7 +33,7 @@ jobs:
     env:
       CRAWLER_DB_PATH: db/crawler.sqlite
       DISCOVERY_SITE_URL: ${{ inputs.site_url || '' }}
-      DISCOVERY_MAX_PAGES_PER_SITE: '50000'
+      DISCOVERY_MAX_PAGES_PER_SITE: '5000'
       DISCOVERY_MAX_SITEMAPS: ${{ github.ref_name == 'main' && '2000' || '100' }}
       DISCOVERY_TIMEOUT_MS: ${{ github.ref_name == 'main' && '20000' || '10000' }}
       DISCOVERY_RESUME_INCOMPLETE: ${{ inputs.resume_incomplete || false }}

@@ -14,8 +14,10 @@ on:
         default: '2000'
         type: string
   schedule:
-    # Run hourly except at 01:00 for Turso sync and at 00:00, 08:00, and 16:00 UTC for discovery.
-    - cron: '0 2-7,9-15,17-23 * * *'
+    # Egypt local time (UTC+03): 04:00, 07:00, 11:00, 14:00, 16:00, 19:00, 21:00, and 22:30.
+    # GitHub Actions cron is UTC; the schedules below are the corresponding UTC times.
+    - cron: '0 1,4,8,11,13,16,18 * * *'
+    - cron: '30 19 * * *'
 
 concurrency:
   group: baheth-local-crawler-db
