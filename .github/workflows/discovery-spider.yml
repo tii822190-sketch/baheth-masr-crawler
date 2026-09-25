@@ -14,10 +14,9 @@ on:
         default: false
         type: boolean
   schedule:
-    # Egypt local time (UTC+03): 02:00, 06:00, 09:00, 13:00, 18:00, and 22:30.
-    # GitHub Actions cron is UTC; the schedules below are the corresponding UTC times.
-    - cron: '0 3,6,10,15,23 * * *'
-    - cron: '30 19 * * *'
+    # GitHub Actions default timezone (UTC): 02:00, 06:00, 09:00, 13:00, 18:00, and 22:30.
+    - cron: '0 2,6,9,13,18 * * *'
+    - cron: '30 22 * * *'
 
 permissions:
   contents: write

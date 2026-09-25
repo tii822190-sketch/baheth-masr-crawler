@@ -3,9 +3,8 @@ name: Sync Index Results to D1 through Worker
 on:
   workflow_dispatch:
   schedule:
-    # Egypt local time (UTC+03): daily at 01:00.
-    # GitHub Actions cron is UTC, so this runs at 22:00 UTC on the previous day.
-    - cron: '0 22 * * *'
+    # GitHub Actions default timezone (UTC): daily at 01:00.
+    - cron: '0 1 * * *'
 
 permissions:
   contents: write
