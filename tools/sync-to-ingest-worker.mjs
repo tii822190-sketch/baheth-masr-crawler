@@ -6,6 +6,7 @@ const ingestToken = process.env.INGEST_TOKEN;
 const batchSize = Math.min(16, Math.max(1, Number(process.env.INGEST_BATCH_SIZE || 16)));
 const maxRows = Math.max(0, Number(process.env.INGEST_MAX_ROWS || 0));
 const retryCount = Math.max(0, Number(process.env.INGEST_RETRIES || 5));
+const localDeleteBatchSize = 500;
 
 if (!ingestUrl || !ingestToken) throw new Error('INGEST_URL and INGEST_TOKEN are required');
 const local = new Database(localPath);
@@ -56,10 +57,15 @@ try {
   }
 
   if (localRows.length) {
-    const placeholders = localRows.map(() => '?').join(',');
-    const deleted = local.transaction(() =>
-      local.prepare(`DELETE FROM index_results WHERE id IN (${placeholders})`).run(...localRows.map((row) => row.id)).changes,
-    )();
+    const deleted = local.transaction(() => {
+      let count = 0;
+      for (let offset = 0; offset < localRows.length; offset += localDeleteBatchSize) {
+        const chunk = localRows.slice(offset, offset + localDeleteBatchSize);
+        const placeholders = chunk.map(() => '?').join(',');
+        count += local.prepare(`DELETE FROM index_results WHERE id IN (${placeholders})`).run(...chunk.map((row) => row.id)).changes;
+      }
+      return count;
+    })();
     if (deleted !== localRows.length) throw new Error(`Expected to delete ${localRows.length} local rows, deleted ${deleted}`);
   }
 
