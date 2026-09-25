@@ -14,8 +14,8 @@ on:
         default: false
         type: boolean
   schedule:
-    # GitHub Actions default timezone (UTC): 02:00, 06:00, 09:00, and 13:00.
-    - cron: '0 2,6,9,13 * * *'
+    # GitHub Actions default timezone (UTC): 19:00, 20:00, 21:00, and 22:00.
+    - cron: '0 19,20,21,22 * * *'
 
 permissions:
   contents: write
