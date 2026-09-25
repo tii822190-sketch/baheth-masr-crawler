@@ -35,11 +35,11 @@ jobs:
       CRAWLER_FETCH_MODE: hybrid
       CRAWLER_BATCH_SIZE: ${{ inputs.batch_size || '2000' }}
       CRAWLER_MAX_PAGES: ${{ inputs.max_pages || '2000' }}
-      CRAWLER_CONCURRENCY: '10'
-      CRAWLER_BROWSER_CONCURRENCY: '3'
-      CRAWLER_BROWSER_BUDGET_MS: '15000'
-      CRAWLER_PAGE_TIMEOUT_MS: '120000'
-      CRAWLER_RETRIES: '1'
+      CRAWLER_CONCURRENCY: '15'
+      CRAWLER_BROWSER_CONCURRENCY: '5'
+      CRAWLER_BROWSER_BUDGET_MS: '10000'
+      CRAWLER_PAGE_TIMEOUT_MS: '60000'
+      CRAWLER_RETRIES: '0'
       CRAWLER_REVIEW_RETRIES: '1'
     steps:
       - uses: actions/checkout@v4
@@ -63,6 +63,13 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           for attempt in 1 2 3; do
+            git fetch origin main
+            if ! git diff --quiet HEAD..origin/main -- db/crawler.sqlite; then
+              echo "Remote database changed after this run started; refusing to overwrite it." >&2
+              echo "The crawler batch completed, but its SQLite result requires an explicit merge/reconciliation." >&2
+              exit 1
+            fi
+            git reset --mixed origin/main
             git add db/crawler.sqlite
             if git diff --cached --quiet; then
               echo "No database changes to commit."
@@ -74,15 +81,11 @@ jobs:
               exit 0
             fi
             if [ "$attempt" -eq 3 ]; then
-              echo "Unable to push database after ${attempt} attempts." >&2
+              echo "Unable to push database after ${attempt} commit-only attempts." >&2
               exit 1
             fi
-            echo "Remote changed during push; refreshing database and retrying crawler (attempt $((attempt + 1)))."
-            git fetch origin main
-            git reset --hard origin/main
-            node crawler/src/cli.mjs init
-            bash tools/run-primary-crawler.sh
-            node tools/verify-local-crawler-db.mjs
+            echo "Remote changed during push; refreshing base and retrying database commit only (attempt $((attempt + 1)))."
+            git reset --mixed origin/main
           done
       - uses: actions/upload-artifact@v4
         if: always()

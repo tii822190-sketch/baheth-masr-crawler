@@ -6,11 +6,11 @@ import taxonomy from '../../taxonomy/search-taxonomy.json' with { type: 'json' }
 
 const batchSize = Math.max(1, Number(process.env.CRAWLER_BATCH_SIZE || 20));
 const maxPages = Math.max(1, Number(process.env.CRAWLER_MAX_PAGES || batchSize));
-const concurrency = Math.max(1, Math.min(10, Number(process.env.CRAWLER_CONCURRENCY || 10)));
+const concurrency = Math.max(1, Math.min(20, Number(process.env.CRAWLER_CONCURRENCY || 15)));
 const browserConcurrency = Math.max(1, Math.min(concurrency, Number(process.env.CRAWLER_BROWSER_CONCURRENCY || Math.min(3, concurrency))));
-const retries = Math.max(0, Number(process.env.CRAWLER_RETRIES || 1));
-const pageTimeoutMs = Math.max(1000, Number(process.env.CRAWLER_PAGE_TIMEOUT_MS || 120000));
-const browserBudgetMs = Math.max(1000, Number(process.env.CRAWLER_BROWSER_BUDGET_MS || 15000));
+const retries = Math.max(0, Number(process.env.CRAWLER_RETRIES || 0));
+const pageTimeoutMs = Math.max(1000, Number(process.env.CRAWLER_PAGE_TIMEOUT_MS || 60000));
+const browserBudgetMs = Math.max(1000, Number(process.env.CRAWLER_BROWSER_BUDGET_MS || 10000));
 const fetchMode = process.env.CRAWLER_FETCH_MODE || 'hybrid';
 const retryLimit = Math.max(1, Number(process.env.CRAWLER_REVIEW_RETRIES || 1));
 const minExtractedTextChars = Math.max(20, Number(process.env.CRAWLER_MIN_EXTRACTED_TEXT_CHARS || 80));
