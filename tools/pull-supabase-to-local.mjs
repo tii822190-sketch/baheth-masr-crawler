@@ -29,15 +29,23 @@ async function readAll(table, columns) {
 async function readQueueBatch() {
   if (queueMode === 'none') return { rows: [], source: 'none' };
   if (queueMode !== 'batch') return { rows: await readAll('crawler_queue', 'id,site_id,url,crawl_status,crawl_attempts'), source: 'full' };
-  async function readStatus(status, offset = 0, limit = queueLimit) {
-    const url = new URL(`${projectUrl}/rest/v1/crawler_queue`);
-    url.searchParams.set('select', 'id,site_id,url,crawl_status,crawl_attempts');
-    url.searchParams.set('crawl_status', `eq.${status}`);
-    if (status === 'needs_review') url.searchParams.set('crawl_attempts', 'lt.2');
-    url.searchParams.set('order', 'id.asc'); url.searchParams.set('limit', String(limit)); url.searchParams.set('offset', String(offset));
-    const response = await fetch(url, { headers });
-    if (!response.ok) throw new Error(`crawler_queue download failed (${response.status}): ${(await response.text()).slice(0, 1000)}`);
-    return response.json();
+  async function readStatus(status) {
+    const rows = [];
+    for (let offset = 0; rows.length < queueLimit; offset += pageSize) {
+      const url = new URL(`${projectUrl}/rest/v1/crawler_queue`);
+      url.searchParams.set('select', 'id,site_id,url,crawl_status,crawl_attempts');
+      url.searchParams.set('crawl_status', `eq.${status}`);
+      if (status === 'needs_review') url.searchParams.set('crawl_attempts', 'lt.2');
+      url.searchParams.set('order', 'id.asc');
+      url.searchParams.set('limit', String(Math.min(pageSize, queueLimit - rows.length)));
+      url.searchParams.set('offset', String(offset));
+      const response = await fetch(url, { headers });
+      if (!response.ok) throw new Error(`crawler_queue download failed (${response.status}): ${(await response.text()).slice(0, 1000)}`);
+      const batch = await response.json();
+      rows.push(...batch);
+      if (batch.length < Math.min(pageSize, queueLimit - rows.length + batch.length)) break;
+    }
+    return rows.slice(0, queueLimit);
   }
   let rows = await readStatus('pending');
   if (!rows.length) rows = await readStatus('needs_review');
