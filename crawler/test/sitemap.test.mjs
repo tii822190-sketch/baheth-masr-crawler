@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { sitemapCandidates, feedCandidates } from '../../tools/sitemap-candidates.mjs';
-import { canonicalize, declaredSitemapLinks, htmlSitemapLinks, isPageUrl, normalizeSitemapUrl, shouldHydratePage, sitemapUrl, xmlLinks } from '../../tools/sitemap-parser.mjs';
+import { canonicalize, declaredSitemapLinks, htmlArabicAlternateLinks, htmlSitemapLinks, isPageUrl, normalizeSitemapUrl, shouldHydratePage, sitemapUrl, xmlLinks } from '../../tools/sitemap-parser.mjs';
 
 const site = 'https://www.example.com/';
 
@@ -93,4 +93,39 @@ test('sparse and JavaScript application-shell pages request browser rendering; c
   const links = Array.from({ length: 16 }, (_, i) => `<a href="/section-${i}">Section ${i}</a>`).join('');
   const text = 'Government public information '.repeat(60);
   assert.equal(shouldHydratePage(`<html><body>${links}<main>${text}</main></body></html>`), false);
+});
+
+test('Quran.com pages are normalized to Arabic and non-Arabic language routes are excluded', () => {
+  const quran = 'https://quran.com/';
+  assert.equal(isPageUrl('https://quran.com/al-baqarah/1', quran), 'https://quran.com/ar/al-baqarah/1');
+  assert.equal(isPageUrl('https://quran.com/ar/al-baqarah/1', quran), 'https://quran.com/ar/al-baqarah/1');
+  assert.equal(isPageUrl('https://quran.com/en/al-baqarah/1', quran), '');
+  assert.equal(isPageUrl('https://quran.com/al-baqarah/1?lang=en', quran), '');
+  assert.equal(isPageUrl('https://quran.com/al-baqarah/1?locale=ar', quran), 'https://quran.com/ar/al-baqarah/1?locale=ar');
+  assert.equal(isPageUrl('https://quran.com/al-baqarah/1/translations', quran), '');
+  assert.equal(isPageUrl('https://quran.com/al-baqarah/1/tafsirs/en-tafsir-ibn-kathir', quran), '');
+  assert.equal(isPageUrl('https://quran.com/what-is-ramadan/WhatIsRamadanSwahili', quran), '');
+  assert.equal(isPageUrl('https://quran.com/al-baqarah/1/tafsirs/ar-tafsir-ibn-kathir', quran), 'https://quran.com/ar/al-baqarah/1/tafsirs/ar-tafsir-ibn-kathir');
+  assert.equal(isPageUrl('https://misrquran.gov.eg/programmes', 'https://misrquran.gov.eg/'), 'https://misrquran.gov.eg/programmes');
+  assert.equal(isPageUrl('https://misrquran.gov.eg/en/programmes', 'https://misrquran.gov.eg/'), '');
+  assert.equal(isPageUrl('https://misrquran.gov.eg/programmes/english', 'https://misrquran.gov.eg/'), '');
+});
+
+test('Quran.com sitemap processing keeps only Arabic equivalents when languages are mixed', () => {
+  const xml = `<urlset><url><loc>https://quran.com/al-baqarah/1</loc></url><url><loc>https://quran.com/en/al-baqarah/1</loc></url><url><loc>https://quran.com/ar/al-baqarah/2</loc></url><url><loc>https://quran.com/al-baqarah/1/translations</loc></url></urlset>`;
+  const result = xmlLinks(xml, 'https://quran.com/sitemap.xml', 'https://quran.com/ar');
+  assert.deepEqual(result.pages, ['https://quran.com/ar/al-baqarah/1', 'https://quran.com/ar/al-baqarah/2']);
+});
+
+test('XML sitemap alternate links prefer the same-site hreflang Arabic URL', () => {
+  const xml = `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml"><url><loc>https://example.gov/en/service</loc><xhtml:link rel="alternate" hreflang="en" href="https://example.gov/en/service"/><xhtml:link rel="alternate" hreflang="ar" href="https://example.gov/ar/service"/></url></urlset>`;
+  const result = xmlLinks(xml, 'https://example.gov/sitemap.xml', 'https://example.gov/');
+  assert.deepEqual(result.pages, ['https://example.gov/ar/service']);
+});
+
+test('HTML hreflang alternates add only the Arabic route on the same site', () => {
+  const html = `<html><head><link rel="alternate" hreflang="en" href="/en/service"><link rel="alternate" hreflang="ar-EG" href="/ar/service"><link rel="alternate" hreflang="ar" href="https://other.example/service"></head></html>`;
+  const result = htmlArabicAlternateLinks(html, 'https://example.gov/current', 'https://example.gov/');
+  assert.deepEqual(result.pages, ['https://example.gov/ar/service']);
+  assert.equal(result.rejected.external_host, 1);
 });

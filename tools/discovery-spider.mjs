@@ -4,10 +4,10 @@ import Database from 'better-sqlite3';
 import * as cheerio from 'cheerio';
 import { feedCandidates, sitemapCandidates } from './sitemap-candidates.mjs';
 import { fetchRobotsPolicy, isRobotsAllowed } from './robots.mjs';
-import { canonicalize, declaredSitemapLinks, htmlSitemapLinks, isPageUrl, normalizeSitemapUrl, pageUrlDecision, shouldHydratePage, xmlLinks } from './sitemap-parser.mjs';
+import { canonicalize, declaredSitemapLinks, htmlArabicAlternateLinks, htmlSitemapLinks, isPageUrl, normalizeSitemapUrl, pageUrlDecision, shouldHydratePage, xmlLinks } from './sitemap-parser.mjs';
 
 const DB_PATH = process.env.CRAWLER_DB_PATH || 'db/crawler.sqlite';
-const MAX_PAGES_PER_SITE = Math.max(1, Number(process.env.DISCOVERY_MAX_PAGES_PER_SITE || 5000));
+const MAX_PAGES_PER_SITE = Math.min(10000, Math.max(1, Number(process.env.DISCOVERY_MAX_PAGES_PER_SITE || 10000)));
 const REQUEST_TIMEOUT_MS = Math.max(1000, Number(process.env.DISCOVERY_TIMEOUT_MS || 20000));
 const MAX_SITEMAPS = Math.max(1, Number(process.env.DISCOVERY_MAX_SITEMAPS || 2000));
 const RESUME_INCOMPLETE = /^(1|true|yes)$/i.test(process.env.DISCOVERY_RESUME_INCOMPLETE || '');
@@ -125,6 +125,11 @@ function extractHtmlLinks(html, siteUrl) {
     const topical = /(?:news|article|announcement|press|media|publication|report|service|initiative|program|project|decision|law|regulation|event|خبر|أخبار|مقال|إعلان|بيان|خدمات|مبادرة|برنامج|مشروع|قرار|قانون|لائحة|حدث|وزارة|محافظة)/i.test(hints);
     links.set(url, { url, text, hasArabic: /[\u0600-\u06FF]/.test(hints), topical, score: (topical ? 5 : 0) + (/[\u0600-\u06FF]/.test(hints) ? 3 : 0) + (pagePath.length > 8 ? 1 : 0) });
   });
+  const alternate = htmlArabicAlternateLinks(html, siteUrl, siteUrl);
+  for (const [reason, count] of Object.entries(alternate.rejected)) rejected[reason] = (rejected[reason] || 0) + count;
+  for (const url of alternate.pages) {
+    if (!links.has(url)) links.set(url, { url, text: '', hasArabic: true, topical: false, score: 4 });
+  }
   return { links: [...links.values()].sort((a, b) => b.score - a.score), rejected };
 }
 function isLanguageOnlyUrl(url) {

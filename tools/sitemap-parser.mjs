@@ -2,6 +2,37 @@ const blockedFile = /\.(?:7z|apk|avi|bin|css|csv|doc|docx|exe|gif|gz|ico|iso|jpe
 const blockedPath = /(?:^|\/)(?:admin|administrator|api|cart|checkout|comment|comments|feed|feeds|filter|login|logout|search|wp-admin|wp-json)(?:\/|$)/i;
 const blockedPagePath = /(?:^|\/)(?:about(?:-us)?|contact(?:-us)?|privacy(?:-policy)?|terms(?:-of-service)?|من[-_ ]?نحن|اتصل[-_ ]?بنا|تواصل[-_ ]?معنا|سياسة[-_ ]?الخصوصية|الشروط[-_ ]?والأحكام)(?:\/|$)/i;
 const trackingParameter = /^(?:utm_.+|fbclid|gclid|dclid|msclkid|yclid|igshid|_ga|_gl|mc_cid|mc_eid|_hsenc|_hsmi|vero_id|oly_anon_id)$/i;
+const nonArabicLanguageSegment = /^(?:en|fr|de|es|it|pt|ru|zh|ja|ko|tr|ur|bn|id|ms|fa|sw|nl|pl|th|az|ku|hi|ta|te|uk|ar-[a-z]{2})$/i;
+const nonArabicLanguagePrefix = /^(?:en|fr|de|es|it|pt|ru|zh|ja|ko|tr|ur|bn|id|ms|fa|sw|nl|pl|th|az|ku|hi|ta|te|uk|english|french|german|spanish|portuguese|russian|chinese|japanese|korean|turkish|urdu|bengali|indonesian|malay|persian|swahili|dutch|polish|thai|hindi|tamil|telugu|ukrainian|somali)(?:[-_][a-z]{2,4})?$/i;
+const nonArabicLanguageSuffix = /(?:english|french|german|spanish|portuguese|russian|chinese|japanese|korean|turkish|urdu|bengali|indonesian|malay|persian|swahili|dutch|polish|thai|hindi|tamil|telugu|ukrainian|somali)$/i;
+
+function explicitNonArabicLanguage(url) {
+  const segments = url.pathname.split('/').filter(Boolean);
+  const firstSegment = segments[0] || '';
+  if (nonArabicLanguagePrefix.test(firstSegment)) return 'non_arabic_language';
+  if (segments.some((segment) => nonArabicLanguageSuffix.test(segment))) return 'non_arabic_language_suffix';
+  for (const key of ['lang', 'locale', 'language']) {
+    const value = url.searchParams.get(key);
+    if (value && !/^(?:ar|arabic)(?:[-_.]|$)/i.test(value)) return 'non_arabic_language_parameter';
+  }
+  return null;
+}
+
+function quranArabicUrl(url) {
+  if (url.hostname.replace(/^www\./, '').toLowerCase() !== 'quran.com') return { url: url.toString(), reason: null };
+  const segments = url.pathname.split('/').filter(Boolean);
+  if (segments[0] && nonArabicLanguageSegment.test(segments[0])) return { url: '', reason: 'non_arabic_language' };
+  if (segments.some((segment) => nonArabicLanguageSuffix.test(segment))) return { url: '', reason: 'non_arabic_language_suffix' };
+  if (/(?:^|\/)translations?(?:\/|$)/i.test(url.pathname)) return { url: '', reason: 'non_arabic_translation_route' };
+  const tafsirIndex = segments.findIndex((segment) => /^tafsirs?$/i.test(segment));
+  if (tafsirIndex >= 0 && !/^(?:ar(?:-|$)|arabic)/i.test(segments[tafsirIndex + 1] || '')) return { url: '', reason: 'non_arabic_tafsir_route' };
+  for (const key of ['lang', 'locale', 'language', 'translation', 'tafsir']) {
+    const value = url.searchParams.get(key);
+    if (value && !/^(?:ar|arabic)(?:[-_.]|$)/i.test(value)) return { url: '', reason: 'non_arabic_language_parameter' };
+  }
+  if (segments[0]?.toLowerCase() !== 'ar') url.pathname = `/ar${url.pathname === '/' ? '' : url.pathname}`;
+  return { url: url.toString(), reason: null };
+}
 
 export function canonicalize(raw) {
   try {
@@ -46,9 +77,11 @@ export function pageUrlDecision(raw, siteUrl) {
   if (blockedFile.test(path)) return { url: '', reason: 'asset_file' };
   if (blockedPath.test(path)) return { url: '', reason: 'administrative_or_feed_path' };
   if (blockedPagePath.test(path)) return { url: '', reason: 'noncontent_information_path' };
-  if (/\/(?:sitemap(?:[-_].*)?|feed|rss|atom)(?:\.xml)?$/i.test(path)) return { url: '', reason: 'sitemap_or_feed_path' };
-  if (/\/(?:search|find|query)(?:\/|$)/i.test(path)) return { url: '', reason: 'search_results_path' };
-  return { url, reason: null };
+  if (/(?:^|\/)(?:sitemap(?:[-_].*)?|feed|rss|atom)(?:\.xml)?$/i.test(path)) return { url: '', reason: 'sitemap_or_feed_path' };
+  if (/(?:^|\/)(?:search|find|query)(?:\/|$)/i.test(path)) return { url: '', reason: 'search_results_path' };
+  const nonArabicReason = explicitNonArabicLanguage(parsed);
+  if (nonArabicReason) return { url: '', reason: nonArabicReason };
+  return quranArabicUrl(parsed);
 }
 
 export function isPageUrl(raw, siteUrl) {
@@ -174,7 +207,25 @@ export function xmlLinks(xml, baseUrl, siteUrl) {
       }
     }
   } else {
-    for (const match of text.matchAll(locExpression)) add(match[1]);
+    if (root === 'urlset') {
+      const urlExpression = new RegExp(`<\\s*${tagPattern('url')}\\b[^>]*>([\\s\\S]*?)<\\s*\\/\\s*${tagPattern('url')}\\s*>`, 'gi');
+      for (const urlEntry of text.matchAll(urlExpression)) {
+        const arabicAlternates = [];
+        const linkExpression = new RegExp(`<\\s*${tagPattern('link')}\\b([^>]*)\\/?\\s*>`, 'gi');
+        for (const link of urlEntry[1].matchAll(linkExpression)) {
+          const attributes = {};
+          for (const attribute of link[1].matchAll(/([\w:.-]+)\s*=\s*(["'])(.*?)\2/gs)) attributes[attribute[1].toLowerCase().split(':').at(-1)] = decodeXml(attribute[3]);
+          if (/^ar(?:-|$)/i.test(attributes.hreflang || '') && attributes.href) arabicAlternates.push(attributes.href);
+        }
+        if (arabicAlternates.length) {
+          for (const alternate of arabicAlternates) add(alternate);
+        } else {
+          for (const locMatch of urlEntry[1].matchAll(locExpression)) add(locMatch[1]);
+        }
+      }
+    } else {
+      for (const match of text.matchAll(locExpression)) add(match[1]);
+    }
   }
 
   if (['feed', 'rss', 'rdf'].includes(root)) {
@@ -201,6 +252,22 @@ export function htmlSitemapLinks(html, baseUrl, siteUrl) {
     else if (!decision.url) rejected[decision.reason] = (rejected[decision.reason] || 0) + 1;
   });
   return { pages, rejected, linksFound: $('a[href]').length };
+}
+
+export function htmlArabicAlternateLinks(html, baseUrl, siteUrl) {
+  const $ = cheerio.load(String(html || ''));
+  const pages = new Set();
+  const rejected = {};
+  $('link[rel~="alternate"][hreflang][href], a[hreflang][href]').each((_, element) => {
+    const language = String($(element).attr('hreflang') || '').trim();
+    if (!/^ar(?:-|$)/i.test(language)) return;
+    let absolute;
+    try { absolute = new URL($(element).attr('href'), baseUrl).toString(); } catch { rejected.invalid_url = (rejected.invalid_url || 0) + 1; return; }
+    const decision = pageUrlDecision(absolute, siteUrl);
+    if (decision.url) pages.add(decision.url);
+    else rejected[decision.reason] = (rejected[decision.reason] || 0) + 1;
+  });
+  return { pages: [...pages], rejected };
 }
 
 export function declaredSitemapLinks(html, baseUrl, siteUrl) {
