@@ -34,6 +34,7 @@ jobs:
       CRAWLER_INPUT_DB_PATH: /tmp/crawler.sqlite
       SUPABASE_URL: https://ysntytwkggxdapokglsc.supabase.co
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      SUPABASE_SYNC_QUEUE_DELETES: 'true'
       CRAWLER_FETCH_MODE: hybrid
       CRAWLER_BATCH_SIZE: ${{ inputs.batch_size || '2000' }}
       CRAWLER_MAX_PAGES: ${{ inputs.max_pages || '2000' }}
