@@ -47,11 +47,12 @@ jobs:
           test -n "$INGEST_TOKEN"
       - name: Transfer index results to D1 through Worker
         run: node tools/sync-to-ingest-worker.mjs
-      - name: Verify local database only
+      - name: Verify temporary database only
         run: |
+          export CRAWLER_INPUT_DB_PATH=/tmp/crawler.sqlite
           node --input-type=module <<'NODE'
           import Database from 'better-sqlite3';
-          const db = new Database('db/crawler.sqlite', { readonly: true });
+          const db = new Database(process.env.CRAWLER_INPUT_DB_PATH, { readonly: true });
           if (db.prepare('PRAGMA integrity_check').get().integrity_check !== 'ok') throw new Error('Database integrity check failed');
           const remaining = db.prepare('SELECT COUNT(*) AS count FROM index_results').get().count;
           if (remaining !== 0) throw new Error(`Local index_results still contains ${remaining} rows`);
