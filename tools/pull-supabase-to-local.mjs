@@ -46,7 +46,7 @@ async function readQueueBatch() {
 try {
   const sites = sitesMode === 'none' ? [] : await readAll('crawler_sites', 'id,url,category,crawl_status,discovery_cursor,created_at,updated_at');
   const queueResult = await readQueueBatch();
-  const results = await readAll('crawler_results', 'id,url,title,description,icon_url,keywords,snippet,created_at,updated_at');
+  const results = await readAll('crawler_results', 'id,url,title,description,icon_url,snippet,created_at,updated_at');
   const reset = db.transaction(() => {
     db.exec('DELETE FROM index_results; DELETE FROM site_pages; DELETE FROM sites;');
     const site = db.prepare("INSERT INTO sites (id,url,category,crawl_status,discovery_cursor,created_at,updated_at) VALUES (?,?,?,?,?,?,?)");
@@ -54,7 +54,7 @@ try {
     const page = db.prepare('INSERT INTO site_pages (id,site_id,url,crawl_status,crawl_attempts) VALUES (?,?,?,?,?)');
     for (const row of queueResult.rows) page.run(row.id, row.site_id, row.url, row.crawl_status, row.crawl_attempts);
     const result = db.prepare('INSERT INTO index_results (id,url,title,description,icon_url,keywords,snippet,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)');
-    for (const row of results) result.run(row.id, row.url, row.title, row.description, row.icon_url, row.keywords, row.snippet, row.created_at, row.updated_at);
+    for (const row of results) result.run(row.id, row.url, row.title, row.description, row.icon_url, row.keywords || '', row.snippet, row.created_at, row.updated_at);
   });
   reset();
   if (queueResult.source === 'batch') {
