@@ -9,12 +9,13 @@ const db = {
       bind(...args) {
         return {
           async run() {
-            if (sql.includes('CREATE TRIGGER')) {
-              return { success: true };
+            if (sql.includes('INSERT OR IGNORE INTO search_pages_fts_keys')) {
+              const [url, search_text] = args;
+              if (!ftsRows.some((row) => row.url === url)) ftsRows.push({ url, search_text });
             } else if (sql.includes('INSERT OR IGNORE INTO search_pages (')) {
-              const [url, title, description, icon_url, search_text] = args;
+              const [url, title, description, icon_url] = args;
               if (rows.some((row) => row.url === url)) lastChanges = 0;
-              else { rows.push({ url, title, description, icon_url, search_text }); ftsRows.push({ url, search_text }); lastChanges = 1; }
+              else { rows.push({ url, title, description, icon_url }); lastChanges = 1; }
             }
             return { success: true };
           },
@@ -54,8 +55,8 @@ const expected = 'وزارة الأوقاف الموقع الرسمي أهلا �
 if (response.status !== 200) throw new Error(`Unexpected status: ${response.status}`);
 if (body.inserted !== 1) throw new Error(`Unexpected inserted count: ${body.inserted}`);
 if (row.url !== 'https://www.karam.com/some/page?x=1') throw new Error(`Full page URL was not preserved: ${row.url}`);
-if (row.search_text !== expected) throw new Error(`Unexpected search_text: ${row.search_text}`);
-if (row.search_text.includes('https://') || row.search_text.includes('/some/page')) throw new Error('search_text contains protocol or path');
-if (ftsRows.length !== 1 || ftsRows[0].search_text !== expected) throw new Error('FTS row was not written correctly');
+if ('search_text' in row) throw new Error('Main row still contains search_text');
+if (ftsRows.length !== 1 || ftsRows[0].search_text !== expected) throw new Error('FTS source row was not written correctly');
+if (ftsRows[0].search_text.includes('https://') || ftsRows[0].search_text.includes('/some/page')) throw new Error('search_text contains protocol or path');
 if (rows.length !== 1) throw new Error(`Duplicate URL was written: ${rows.length}`);
 console.log(JSON.stringify({ ok: true, status: response.status, body, stored_row: row, fts_row: ftsRows[0] }, null, 2));

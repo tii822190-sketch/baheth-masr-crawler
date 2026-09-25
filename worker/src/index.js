@@ -60,19 +60,17 @@ function rowFromInput(input) {
   return { url, title, description, icon_url: clean(input.icon_url), search_text: searchText };
 }
 
-const ensureFtsTrigger = (env) => env.DB.prepare(`
-  CREATE TRIGGER IF NOT EXISTS search_pages_after_insert
-  AFTER INSERT ON search_pages
-  BEGIN
-    INSERT INTO search_pages_fts (url, search_text) VALUES (new.url, new.search_text);
-  END
-`).bind();
-
 function insertStatements(env, row) {
-  return [env.DB.prepare(`
-    INSERT OR IGNORE INTO search_pages (url, title, description, icon_url, search_text)
-    VALUES (?, ?, ?, ?, ?)
-  `).bind(row.url, row.title, row.description, row.icon_url, row.search_text)];
+  return [
+    env.DB.prepare(`
+      INSERT OR IGNORE INTO search_pages (url, title, description, icon_url)
+      VALUES (?, ?, ?, ?)
+    `).bind(row.url, row.title, row.description, row.icon_url),
+    env.DB.prepare(`
+      INSERT OR IGNORE INTO search_pages_fts_keys (url, search_text)
+      VALUES (?, ?)
+    `).bind(row.url, row.search_text),
+  ];
 }
 
 export default {
@@ -94,7 +92,7 @@ export default {
     if (rows.some((row) => !row)) return json({ success: false, error: "Each row needs a valid url and searchable fields" }, 400);
 
     try {
-      await env.DB.batch([ensureFtsTrigger(env), ...rows.flatMap((row) => insertStatements(env, row))]);
+      await env.DB.batch(rows.flatMap((row) => insertStatements(env, row)));
       return json({ success: true, inserted: rows.length, rows: rows.map(({ url, search_text }) => ({ url, search_text })) });
     } catch (error) {
       console.error("ingest_error", error instanceof Error ? error.message : String(error));
