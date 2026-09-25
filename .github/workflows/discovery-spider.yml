@@ -34,7 +34,7 @@ jobs:
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
       SUPABASE_SYNC_QUEUE_DELETES: 'true'
       DISCOVERY_SITE_URL: ${{ inputs.site_url || '' }}
-      DISCOVERY_MAX_PAGES_PER_SITE: '5000'
+      DISCOVERY_MAX_PAGES_PER_SITE: '10000'
       DISCOVERY_MAX_SITEMAPS: ${{ github.ref_name == 'main' && '2000' || '100' }}
       DISCOVERY_TIMEOUT_MS: ${{ github.ref_name == 'main' && '20000' || '10000' }}
       DISCOVERY_RESUME_INCOMPLETE: ${{ inputs.resume_incomplete || false }}
